@@ -71,11 +71,33 @@ cell harness 覆盖三种 pill 形态、下拉行列/深度/缩进/唯一高亮�
 
 ## 下一步：用户重启 dsh web 后目视
 
-1. 本工作区（单任务）→ pill 圆角灰底、**不可点击**、文本与旧版一致。
-2. 想看树：按 `README.md` 的「Try it with a tree」两条命令把本任务挂到一个临时父任务下，
-   **无需再重启**（轮询 10s 内跟随）→ pill 变成 `Tree demo › [P2] … · 进行中 · 子任务`；
-   点击 → 树展开、当前行高亮、Esc/外部点击/再点都能关。
+1. **本工作区现在已有一个演示父子对**：`09-15-tree-demo`（父，`planning`，用 `--no-start` 建的）←
+   `09-15-trellis-statusline`（子，当前会话任务）。指针仍指向真实任务，所以重启后 pill 应显示：
+
+   ```
+   Tree demo › [P2] Trellis statusline plugin for dsh web · 进行中 · 子任务
+   ```
+
+   真实 host 半边已复跑确认（`.scratch/probe-real.mjs`）：`tree.id = 09-15-tree-demo`，
+   子节点带 `current: true`。
+
+   撤销（去掉父子关系、恢复单任务形态）：
+   ```bash
+   python ./.trellis/scripts/task.py remove-subtask tree-demo 09-15-trellis-statusline
+   python ./.trellis/scripts/task.py archive tree-demo --skip-branch-validation
+   ```
+
+2. 点击 pill → 下拉两行（`[P2] Tree demo · 规划中` 在 0 缩进；
+   `[P2] Trellis statusline plugin for dsh web · 进行中` 在 1 缩进且高亮）；
+   再点 / Esc / 点外部三种方式都能关。
+
 3. 反例：`any` / `backwave` / `ecms-backend` / `agent_demo` 仍是空态（无误报）。
+
+**踩过的坑（已写进 README）**：造树的 shell 命令不要用
+`$(ls -d .trellis/tasks/*tree-demo)` —— 那是 Git Bash 语法，在 PowerShell 里 `ls` 是
+`Get-ChildItem`、`-d` 前缀匹配成 `-Depth`、glob 被当整数解析而失败。
+改用**裸任务名**（`task_utils.py:59` 的 `find_task_by_name` 支持后缀匹配且歧义即报错）：
+`task.py add-subtask tree-demo 09-15-trellis-statusline`，两种 shell 通用。
 
 两项确认后可 `python ./.trellis/scripts/task.py archive .trellis/tasks/09-15-trellis-statusline`。
 

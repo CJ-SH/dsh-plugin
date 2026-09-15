@@ -130,12 +130,22 @@ The pill picks it up within one poll, so this needs no restart:
 
 ```bash
 python ./.trellis/scripts/task.py create "Tree demo" --slug tree-demo --no-start
-python ./.trellis/scripts/task.py add-subtask "$(ls -d .trellis/tasks/*tree-demo)" .trellis/tasks/<your-task>
+python ./.trellis/scripts/task.py add-subtask tree-demo <your-task-dir-name>
 # the pill now reads:  Tree demo › [P2] <your task> · 进行中 · 子任务
 # undo:
-python ./.trellis/scripts/task.py remove-subtask "$(ls -d .trellis/tasks/*tree-demo)" .trellis/tasks/<your-task>
-python ./.trellis/scripts/task.py archive "$(ls -d .trellis/tasks/*tree-demo)" --skip-branch-validation
+python ./.trellis/scripts/task.py remove-subtask tree-demo <your-task-dir-name>
+python ./.trellis/scripts/task.py archive tree-demo --skip-branch-validation
 ```
+
+Both the parent and the child argument accept a **bare task name**: `tree-demo` resolves to the
+`MM-DD-tree-demo` directory by suffix match, and an ambiguous suffix is a hard error rather than a
+coin flip (`task_utils.py:59`). That matters because the obvious alternative — a glob such as
+`$(ls -d .trellis/tasks/*tree-demo)` — is shell-specific and breaks in PowerShell, where `ls` is
+`Get-ChildItem`, `-d` prefix-binds to `-Depth`, and the glob is then parsed as an integer.
+
+`--no-start` keeps `task.py create` from claiming the session pointer, so the demo parent never
+becomes the active task; `--skip-branch-validation` is needed at archive time because a task that
+was never started has no `branch` recorded.
 
 Without a browser, the channel answers at `POST {channel}/{endpoint}`:
 
