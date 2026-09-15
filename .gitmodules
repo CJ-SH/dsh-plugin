@@ -1,0 +1,3 @@
+[submodule "dsh-plugin-ollama-usage"]
+	path = dsh-plugin-ollama-usage
+	url = ./dsh-plugin-ollama-usage
