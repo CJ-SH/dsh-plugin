@@ -79,9 +79,53 @@ status:'in_progress', priority:'P2'}`，即 D1 全链路（会话 → cwd → �
 
 1. 存在 `<cwd>/.trellis/.runtime/sessions/dsh_<sessionId>.json` 且 `current_task` 指向有效任务 → 用它。
    （key 由 `_sanitize_key` 规则推出：`session-<uuid>` 只含 `[A-Za-z0-9._-]`，原样保留 → `dsh_session-<uuid>`。）
-2. 否则扫描 `<cwd>/.trellis/tasks/*/task.json`：`status === 'in_progress'` 优先，其次 `'planning'`。
+2. 否则扫描 `<cwd>/.trellis/tasks/*/task.json`：`status === 'in_progress'` 优先，其次 `'planning'`，
+   **且必须 `branch` 非空**（2026-09-15 真机验收后修正，见 §2.2.1）。
 3. 同级多个候选时：取目录名（含 `MM-DD-` 前缀）字典序最大的，即最近建的任务；实现时固定该 tie-break 并写进测试。
 4. 无 `<cwd>/.trellis`、无匹配、任何读取异常 → `{ status: 'none' }`（不抛）。
+
+#### 2.2.1 「已开工」判据（真机验收后新增，修复误报）
+
+用户真机验收时报告：其他工作区显示 `[P1] Bootstrap Guidelines · 进行中`，而其经验里这项不该出现。
+跨 5 个真实工作区实测确认这是**扫描步骤的误报**，根因：
+
+- `trellis init` 给每个新项目建的 `00-bootstrap-guidelines`，`status` 一出生就是 `in_progress`，
+  且**不会被自动改回去**（`dsh-plugin` 里它靠手动 archive 才变 `completed`；
+  `dsh\any`、`dsh\backwave`、`python\agent_demo`、`java\ecms-backend` 四个工作区至今仍是 `in_progress`）。
+- 而 **Trellis 自己从不扫描 `tasks/`**：`resolve_active_task()` 只读会话指针
+  （`active_task.py:646-678`，`allow_single_session_fallback` 默认 False）。所以 Trellis 对这四个
+  工作区的答案是「无活动任务」——只有本设计的 D1 第 3 步会把它翻出来。
+
+判据取 **`branch` 非空**，依据是 `task.py` 自己的语义：`cmd_start` 的注释写着
+"Move a freshly started task to in_progress and record its branch … Recording at start is what
+keeps `branch` trustworthy"（`task.py:88-131`）。**`task.py start` 正是那条既写 `branch`、
+又写运行时指针、还把 `planning → in_progress` 的命令**。
+
+| 场景 | `status` | `branch` | 扫描候选 |
+|---|---|---|---|
+| `trellis init` 脚手架，从未 start | `in_progress` | `null` | 否 |
+| 真被做过的任务 | `in_progress` | 分支名 | 是 |
+| 未 start 的 planning 任务 | `planning` | `null` | 否 |
+
+**指针路径不加这道过滤**（关键的不对称）：指针本身就是「某个会话已经 start 过它」的直接证据；
+且非 git 仓库 / detached HEAD 时 `task.py start` 记录不到分支（`task.py:129-130`），那时只有指针能救。
+测试用「指针指向一个 `branch: null` 的任务」把这条不对称钉住。
+
+真机前后对比（同一份 host 半边、同一批工作区，探针用无指针的 sessionId 强制走扫描路径）：
+
+| 工作区 | 修正前 | 修正后 |
+|---|---|---|
+| `dsh-plugin` | `[P2] Trellis statusline plugin for dsh web · in_progress` | 同前（真任务，有分支） |
+| `dsh\any` | `[P1] Bootstrap Guidelines · in_progress` | 空态 |
+| `dsh\backwave` | `[P1] Bootstrap Guidelines · in_progress` | 空态 |
+| `java\ecms-backend` | `[P1] Bootstrap Guidelines · in_progress` | 空态 |
+| `python\agent_demo` | `[P1] Bootstrap Guidelines · in_progress` | 空态 |
+
+副作用（已知、可接受）：非 git 工作区里「由别的会话 start、本会话又无指针」的任务，扫描会漏 → 空态。
+宁可漏报也不误报。
+
+另：`review` 状态不在候选内（D1 只定了 `in_progress`/`planning`）。若要算，改 `RUNNING_STATUSES` 一处即可，
+已在 README 的"不做什么"里标注。
 
 ### 2.3 返回字段
 
@@ -92,17 +136,28 @@ id 用**任务目录名**（`09-15-trellis-statusline`）——它同时是 `cur
 
 ## 3. 呈现（D2：会话头部 pill）
 
-- 席位：`conversation.session.header.utilities`（步骤 0 复核：`kind: list, scope: session` 未变，
-  `standardProps` 含 `sessionId`）→ 只追加、不替换官方 cell。
+> **D2 修订（2026-09-15，真机验收后）**：席位由 `conversation.session.header.utilities`
+> 改为 `conversation.session.header.actions`。理由（用户提出，实测支持）：
+> `.actions` 是"Title-adjacent Session actions"（紧邻会话标题），横向空间明显多于右对齐的
+> `.utilities`；且用户希望 pill 紧挨「会话预设模式」选择器右侧。实测 `.actions` 占用为
+> `agent-preset`(order -10) 与 `job-list`(order 20)，故取 `order: 10` —— 正好夹在两者之间。
+> `.utilities` 的实测事实（`kind/scope`、`standardProps` 含 `sessionId`、`:empty` 自动隐藏）
+> 仍成立并已并入 spec，只是不再是本插件的席位。
+
+- 席位：`conversation.session.header.actions`（实测 `kind: list, scope: session`，
+  `standardProps` 含 `sessionId`，`replaceRisk: none`）→ 只追加、不替换官方 cell。
 - 组件签名照官方同席位惯例：`function StatuslineCell({ sessionId, t })`
-  （对照 `dsh-client-ui-jobs` 的 `JobListAction({ sessionId, useSessions, t })`）。
+  （对照 `dsh-client-ui-jobs` 的 `JobListAction({ sessionId, useSessions, t })`，
+  它注册的正是 `.actions`）。
 - 渲染形态：一小段等宽数字友好文本 `[P1] 标题 · 进行中`，样式只用 `--dsw-*` token，`data-*` 表达状态。
-- **空态 = 返回 `null`**：`.utilities` 有 `:empty{display:none}`，整行自动隐藏。
-  这与官方 jobs cell 的既定风格一致（"普通对话不该长出用不到的控制"）。
+- **空态 = 返回 `null`**：在 `.utilities` 里这一行有 `:empty{display:none}` 会自动隐藏；
+  在 `.actions` 里该行本来就有 `agent-preset`/`job-list` 常驻，`null` 只是不贡献单元格、不占位。
+  两者都与官方 jobs cell 的既定风格一致（"普通对话不该长出用不到的控制"）。
 - 刷新：`ctx.interval` 每 10s 重新 `task/read`；`sessionId` 变化时立即刷新；卸载清理 interval。
 - 交互：MVP 无（不设 onClick）、不吞点击、不设 title 以外的东西。
-- 顺序：`order: 5`。步骤 0 实测该席位占用为 `open-in-app`(-10)、`session-log-download`(默认 0)、
-  第三方 `dsh-better-sidebar:bottom-toggle`(10)，故 5 落在官方记录导出与侧栏按钮之间。
+- 顺序：`order: 10`（`agent-preset` -10 → 本 cell → `job-list` 20）。
+- 本地化：`ctx.locale.register('trellis-statusline', {zh, en})` + 注册项 `locale: 'trellis-statusline'`，
+  由 owner 把绑定命名空间的 `t` 投进 props；**但不假设 `t` 一定到**——缺席时 cell 直接读同一份字典。
 
 ## 4. 兼容、风险与权衡
 

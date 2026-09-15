@@ -68,7 +68,16 @@ const scratch = join(here, '.tmp')
 await rm(scratch, { recursive: true, force: true })
 await mkdir(scratch, { recursive: true })
 
-const taskJson = (title, status, priority = 'P2') => ({ id: title, name: title, title, status, priority })
+// `branch` is what `task.py start` records; a task without one was never started. Scan
+// fixtures carry it so they look like real work, and the dedicated cases below omit it.
+const taskJson = (title, status, priority = 'P2', branch = 'master') => ({
+  id: title,
+  name: title,
+  title,
+  status,
+  priority,
+  branch,
+})
 
 async function makeWorkspace(label) {
   const root = join(scratch, label)
@@ -149,7 +158,10 @@ check('an unknown session does not borrow another session\'s workspace', await (
 // --- D1 step 2: the session pointer wins over the scan -----------------------------------
 const wsPointer = await makeWorkspace('pointer')
 pointAt(wsPointer)
-await writeTask(wsPointer, '09-15-older', taskJson('Older planning task', 'planning', 'P3'))
+// The pointed-at task is deliberately never-started (no `branch`): a pointer is direct
+// evidence that a session started the task, so the pointer path does not apply the
+// scan's "was it ever started" filter — it must still win here.
+await writeTask(wsPointer, '09-15-older', { ...taskJson('Older planning task', 'planning', 'P3'), branch: null })
 await writeTask(wsPointer, '09-16-newer', taskJson('Newer in-progress task', 'in_progress', 'P1'))
 await writePointer(wsPointer, SESSION, '.trellis/tasks/09-15-older')
 check('an explicit session pointer outranks the scan', (await read(SESSION)).value.task, {
@@ -173,6 +185,10 @@ check('equal ranks take the lexicographically greatest directory name', (await r
 await writeTask(wsScan, '09-19-epsilon', taskJson('Epsilon completed', 'completed'))
 check('a completed task is not a candidate', (await read(SESSION)).value.task.id, '09-18-delta')
 
+// A never-started task is skipped even when it would otherwise win the tie-break.
+await writeTask(wsScan, '09-20-never-started', { ...taskJson('Never started', 'in_progress'), branch: null })
+check('a never-started task is not a scan candidate', (await read(SESSION)).value.task.id, '09-18-delta')
+
 // A pointer that names something unusable must degrade to the scan, not to an error.
 await writePointer(wsScan, SESSION, '.trellis/tasks/does-not-exist')
 check('a stale pointer falls through to the scan', (await read(SESSION)).value.task.id, '09-18-delta')
@@ -192,6 +208,34 @@ const wsEmpty = await makeWorkspace('empty')
 pointAt(wsEmpty)
 check('a workspace with no tasks is an empty state', await read(SESSION), { ok: true, value: { status: 'none' } })
 
+// --- The reported false positive: `trellis init` scaffolding is not active work -----------
+// Every fresh Trellis project carries this task at `status: in_progress` with `branch: null`,
+// forever, because nothing ever started it. Reporting it made the pill claim that a
+// never-touched setup task was the workspace's active work.
+const wsScaffold = await makeWorkspace('scaffold')
+pointAt(wsScaffold)
+const scaffold = {
+  id: '00-bootstrap-guidelines',
+  name: '00-bootstrap-guidelines',
+  title: 'Bootstrap Guidelines',
+  status: 'in_progress',
+  priority: 'P1',
+  branch: null,
+  base_branch: null,
+  notes: 'First-time setup task created by trellis init (fullstack project)',
+}
+await writeTask(wsScaffold, '00-bootstrap-guidelines', scaffold)
+check('a never-started scaffolding task is not reported', await read(SESSION), { ok: true, value: { status: 'none' } })
+
+// The same file, differing only in the one field `task.py start` writes.
+await writeTask(wsScaffold, '00-bootstrap-guidelines', { ...scaffold, branch: 'master' })
+check('the same task counts once it has been started', (await read(SESSION)).value.task, {
+  id: '00-bootstrap-guidelines',
+  title: 'Bootstrap Guidelines',
+  status: 'in_progress',
+  priority: 'P1',
+})
+
 const wsNoTrellis = join(scratch, 'no-trellis')
 await mkdir(wsNoTrellis, { recursive: true })
 pointAt(wsNoTrellis)
@@ -209,15 +253,15 @@ check('a corrupt task.json is an empty state', await read(SESSION), { ok: true, 
 // --- Field discipline -------------------------------------------------------------------
 const wsFields = await makeWorkspace('fields')
 pointAt(wsFields)
-await writeTask(wsFields, '09-15-fields', { title: '  Spaced title  ', status: 'in_progress', priority: '' })
+await writeTask(wsFields, '09-15-fields', { title: '  Spaced title  ', status: 'in_progress', priority: '', branch: 'master' })
 check('a blank priority is omitted, not defaulted', (await read(SESSION)).value.task, {
   id: '09-15-fields',
   title: 'Spaced title',
   status: 'in_progress',
 })
-await writeTask(wsFields, '09-15-fields', { status: 'in_progress', title: '' })
+await writeTask(wsFields, '09-15-fields', { status: 'in_progress', title: '', branch: 'master' })
 check('a missing title falls back to the directory name', (await read(SESSION)).value.task.title, '09-15-fields')
-await writeTask(wsFields, '09-15-fields', { title: 'x'.repeat(80), status: 'in_progress' })
+await writeTask(wsFields, '09-15-fields', { title: 'x'.repeat(80), status: 'in_progress', branch: 'master' })
 const long = (await read(SESSION)).value.task.title
 check('a long title is truncated to 48 characters', [long.length, long.endsWith('…')], [48, true])
 

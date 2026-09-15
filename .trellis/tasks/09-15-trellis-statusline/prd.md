@@ -34,7 +34,7 @@
 
 - **R1 显示**：在会话头部常驻显示优先级 + 标题 + 状态，形态如 `[P1] 标题 · 进行中`。
 - **R2 口径**：按 **D1** 的四步解析（会话 → 工作区 → 会话指针优先 → 工作区扫描 → 空）。
-- **R3 空态**：没有活动任务时**不渲染**（`.utilities` 席位 `:empty` 自动隐藏整行），不显示占位、不报错。
+- **R3 空态**：没有活动任务时**不渲染**（`null` 单元格：`.actions` 席位不占位），不显示占位、不报错。
 - **R4 只读**：只读 `.trellis/`，绝不写入或修改任何 Trellis 数据；文件异常一律视为"无任务"。
 - **R5 形态与刷新**：host + client 两半、`cordis.patch.yml`、零依赖、无构建步骤；
   轮询周期 10s，任务切换/结束后 ≤10s 内跟随；卸载后无残留。
@@ -57,12 +57,17 @@
      `ctx.sessions.get(id).header.cwd`，否则走 `ctx.workspaceRegistry.list()` 的 sessionIds→path 索引；
      原设计的"client 传 cwd"与 slug 反解两条回退已删除，理由见 `design.md` §2.1）；
   2. 若 `<cwd>/.trellis/.runtime/sessions/dsh_<sessionId>.json` 的 `current_task` 有效 → 用它；
-  3. 否则扫描 `<cwd>/.trellis/tasks/*/task.json`：`in_progress` 优先，其次 `planning`；同级取目录名字典序最大；
+  3. 否则扫描 `<cwd>/.trellis/tasks/*/task.json`：`in_progress` 优先，其次 `planning`；
+     **且必须 `branch` 非空**（2026-09-15 真机验收后修正：`trellis init` 的脚手架任务
+     `00-bootstrap-guidelines` 永远停在 `in_progress` 且从未被 start，五个真实工作区里四个中招，
+     实测与修正见 `design.md` §2.2.1）；同级取目录名字典序最大；
   4. 都没有 → 空态。
-- **D2 呈现位置**：`conversation.session.header.utilities`（list / scope session）追加一个 cell，
-  只追加不替换官方 cell（现占用：`dsh-client-ui-open-in-app` order -10、`dsh-session-log-export`）。
-  代价：**hero（新建会话）阶段整块 header 不渲染，新会话看不到**——已接受。
-- **D3 MVP 默认值**（如无异议即按此实现）：空态不渲染、点击无行为、`order: 5`、轮询 10s。
+- **D2 呈现位置**（2026-09-15 修订）：`conversation.session.header.actions`（list / scope session）
+  追加一个 cell，紧挨「会话预设模式」选择器右侧 —— 实测占用为 `agent-preset`(order -10)、
+  `job-list`(order 20)，故取 `order: 10`。原定 `conversation.session.header.utilities`
+  空间过窄（右对齐，被 `open-in-app` -10、`session-log-download` 0、第三方侧栏按钮 10 占满）。
+  只追加不替换官方 cell。代价不变：**hero（新建会话）阶段整块 header 不渲染，新会话看不到**——已接受。
+- **D3 MVP 默认值**：空态不渲染、点击无行为、`order: 10`（原定 5，随 D2 修订调整）、轮询 10s。
 
 ## 范围外
 

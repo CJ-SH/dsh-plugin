@@ -107,13 +107,14 @@ const ctx = {
 
 exported.apply(ctx)
 
-check('claims exactly one seat', injected, ['conversation.session.header.utilities'])
+check('claims exactly one seat', injected, ['conversation.session.header.actions'])
 check('registered one entry', registrations.length, 1)
 
 const entry = registrations[0].options
-check('seat: slot name is the seat key', entry.name, 'conversation.session.header.utilities')
+check('seat: slot name is the seat key', entry.name, 'conversation.session.header.actions')
 check('seat: cell id is the plugin id', entry.id, 'trellis-statusline')
-check('seat: order', entry.order, 5)
+// Right of `agent-preset` (-10) and left of `job-list` (20), both live occupants of this seat.
+check('seat: order sits between the preset selector and the jobs counter', entry.order, 10)
 check('seat: locale namespace matches the registered one', entry.locale, dictionaries[0]?.ns)
 check('seat registered a component', typeof registrations[0].component, 'function')
 

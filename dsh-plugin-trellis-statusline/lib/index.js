@@ -197,16 +197,27 @@ async function readPointedTask(cwd, sessionId) {
  *
  * Ranking is `in_progress` before `planning`; among equals the lexicographically greatest
  * directory name wins, which is the newest `MM-DD-` prefixed task (design.md §2.2, step 3).
+ *
+ * A candidate must also have been **started at least once**, which is what a recorded
+ * `branch` proves: `task.py start` is the command that both records the checked-out branch
+ * and writes the runtime pointer this half prefers, while `trellis init` leaves a scaffolding
+ * task at `status: in_progress` with `branch: null` forever. Without that check every fresh
+ * Trellis project reports "Bootstrap Guidelines · in progress" as its active task, which no
+ * session is actually working on. The pointer path above is deliberately *not* filtered this
+ * way: a pointer is direct evidence that a session already started the task, and it still
+ * resolves in a workspace that is not a git repository, where no branch gets recorded.
  */
 async function scanTasks(cwd) {
   const tasksRoot = join(cwd, WORKFLOW_DIR, TASKS_DIR)
   let best
   let bestRank = Number.POSITIVE_INFINITY
   for (const dirName of await listDirectories(tasksRoot)) {
-    const task = parseTask(dirName, await readJson(join(tasksRoot, dirName, 'task.json')))
+    const source = await readJson(join(tasksRoot, dirName, 'task.json'))
+    const task = parseTask(dirName, source)
     if (task === undefined) continue
     const rank = statusRank(task.status)
     if (rank === -1) continue
+    if (text(source.branch).length === 0) continue
     if (rank < bestRank || (rank === bestRank && dirName > best.id)) {
       best = task
       bestRank = rank

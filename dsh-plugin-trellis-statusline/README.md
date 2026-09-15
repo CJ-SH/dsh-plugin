@@ -11,10 +11,10 @@ header.
 
 ## What it shows
 
-One cell in the **session header** (`conversation.session.header.utilities`), reading
-`[priority] title · status` for the Trellis task the session's working directory is on — the
-same information the Claude Code `statusline.py` hook puts in a terminal, which dsh's web
-shell had no equivalent for.
+One cell in the **session header** (`conversation.session.header.actions` — the title-adjacent
+actions row, immediately right of the session-preset selector), reading `[priority] title ·
+status` for the Trellis task the session's working directory is on — the same information the
+Claude Code `statusline.py` hook puts in a terminal, which dsh's web shell had no equivalent for.
 
 It resolves, in this order:
 
@@ -23,10 +23,19 @@ It resolves, in this order:
    (`ctx.workspaceRegistry.list()`), which also covers sessions that are no longer live.
 2. **`<cwd>/.trellis/.runtime/sessions/dsh_<sessionId>.json`** — the pointer `task.py start`
    writes. It wins whenever it names a real task directory inside `.trellis`.
-3. **A scan of `<cwd>/.trellis/tasks/<dir>/task.json`** — `in_progress` before `planning`,
-   and among equals the lexicographically greatest directory name (the newest `MM-DD-` task).
+3. **A scan of `<cwd>/.trellis/tasks/<dir>/task.json`** — `in_progress` before `planning`, and
+   among equals the lexicographically greatest directory name (the newest `MM-DD-` task). A
+   scanned task must also have been **started at least once**, which is what a recorded
+   `branch` proves (`task.py start` is what records it; step 2's pointer is not filtered this
+   way, because a pointer is itself evidence that a session started the task).
 
-With no dsh session, no working directory, no `.trellis`, no running task or a corrupt file,
+That last clause matters more than it looks. `trellis init` leaves a scaffolding task —
+`Bootstrap Guidelines` — at `status: in_progress` with `branch: null` and never touches it
+again. Without the check, **every** fresh Trellis project reports that task as its active work
+even though no session has ever opened it. Verified across five real workspaces here: four of
+them have exactly that stale task, and all four correctly render nothing.
+
+With no dsh session, no working directory, no `.trellis`, no started task or a corrupt file,
 the cell renders **nothing at all**. No placeholder, no blank row, no error: an ordinary
 conversation must not grow a control for a capability it is not using.
 
@@ -39,6 +48,8 @@ session, so a `task.py start` or `task.py archive` shows up within one poll.
   and holds no write path — Trellis data cannot be modified by this plugin, and the self-check
   asserts it, including a before/after hash comparison of a workspace's `.trellis/`.
 - It does not start, switch or archive tasks; that stays `task.py`'s job.
+- It only shows `in_progress` and `planning` tasks. A task in `review` is not shown — widen
+  `RUNNING_STATUSES` in `lib/index.js` if that state should count.
 - It shows nothing in the **hero** (new-session) phase, because the whole session header —
   including this seat — is not rendered there. This is a known, accepted limitation.
 - It does not repeat what dsh already shows (model, tokens, elapsed time).
@@ -67,12 +78,12 @@ The plugin stores nothing and has nothing to configure, so uninstalling needs no
 
 ```bash
 node --check lib/index.js && node --check lib/client.js   # both halves parse
-npm test                                                  # 97 assertions, three harnesses
+npm test                                                  # 100 assertions, three harnesses
 ```
 
 | Harness | Covers |
 |---|---|
-| `test/host.test.mjs` | the four-step resolution against throwaway workspaces — pointer first, scan fallback, rank and tie-break, every empty state, the `unknown-endpoint` error, "no write API in the source", and a before/after hash comparison proving a read leaves `.trellis/` byte-identical |
+| `test/host.test.mjs` | the four-step resolution against throwaway workspaces — pointer first (and unfiltered), scan fallback, rank and tie-break, "never started ⇒ not a candidate" with an A/B on the single `branch` field, every empty state, the `unknown-endpoint` error, "no write API in the source", and a before/after hash comparison proving a read leaves `.trellis/` byte-identical |
 | `test/client.test.mjs` | bundle id = package name, only `react` required, the seat (slot key vs cell id vs order), the locale namespace handed to the seat, stylesheet lifecycle, a refused locale namespace degrading to the local dictionaries, cross-half channel/endpoint agreement |
 | `test/cell.test.mjs` | the real cell under a minimal hook runtime — `[P1] title · state`, `null` for every failure mode, an unknown status, the 10 s poll, and interval disposal on both session switch and unmount |
 

@@ -42,17 +42,24 @@ and the browser registers a cell under the same key.
 The `conversation.session.header.*` seats are declared by one entry in
 `conversation.session.header` and share a single contract:
 
-| Seat | Kind | Occupied by |
-|---|---|---|
-| `conversation.session.header.actions` | list | official `job-list` (`order: 20`) |
-| `conversation.session.header.utilities` | list, right-aligned, ascending `order` | `open-in-app` (-10), `session-log-download` (default 0), third-party toggles around 10 |
+| Seat | Kind | Purpose | Occupied by |
+|---|---|---|---|
+| `conversation.session.header.actions` | list | "Title-adjacent Session actions in ascending order" | `agent-preset` (-10), `trellis-statusline` (10), `job-list` (20) |
+| `conversation.session.header.utilities` | list | "Right-aligned Session utilities in ascending order" | `open-in-app` (-10), `session-log-download` (default 0), third-party toggles around 10 |
 
+- **The two rows are not interchangeable.** `.actions` sits beside the session title and has room for
+  a label; `.utilities` is right-aligned and narrow, which is why its shipped occupants are
+  icon-sized. A cell that renders text belongs in `.actions`. Both seats take identical registration
+  options, so this is a layout judgement, not a protocol one — and picking wrongly is cheap to fix
+  (one constant), which is why it is worth testing in the real header rather than reasoning about it.
 - **The seat's standard props carry the session.** `sessionId: SessionId` is among them, so a cell
   learns which session it belongs to from its props — no store lookup and no RPC needed for that.
-- **A list seat that renders nothing hides itself.** The utilities row is styled
-  `:empty { display: none }`, so returning `null` *removes the row* rather than leaving a gap. This
-  is the rule the official jobs cell states as "an ordinary conversation never grows a control for a
-  capability it is not using", and it is why an empty state is `null` and never placeholder text.
+- **A list seat that renders nothing hides itself.** `.utilities` is styled `:empty { display: none }`,
+  so returning `null` *removes the row* rather than leaving a gap; in `.actions` the row is always
+  present because `agent-preset` and `job-list` occupy it, so `null` simply contributes no cell.
+  Either way `null` is the correct empty state, never placeholder text — matching the rule the
+  official jobs cell states as "an ordinary conversation never grows a control for a capability it is
+  not using".
 - **`order` is the only ordering control**, and it is optional (default 0).
 - **The whole header — and therefore every seat inside it — is absent in the hero (new-session)
   phase.** A surface that must be visible before the first message needs a second seat

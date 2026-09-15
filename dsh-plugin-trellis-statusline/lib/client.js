@@ -5,10 +5,11 @@
  * with the shell's loader, which materializes it as a plugin when the web shell needs it.
  * `react` is resolved from the platform baseline, so this bundle requests nothing else.
  *
- * One additive surface: a cell in `conversation.session.header.utilities` that shows the
- * Trellis task the session's workspace is working on. The cell asks the Host half over the
- * private `/trellis-statusline` channel and renders nothing at all when there is no task —
- * an ordinary conversation must not grow a control for a capability it is not using.
+ * One additive surface: a cell in `conversation.session.header.actions` — the title-adjacent
+ * session actions row, immediately right of the session-preset selector — showing the Trellis
+ * task the session's workspace is working on. The cell asks the Host half over the private
+ * `/trellis-statusline` channel and renders nothing at all when there is no task — an ordinary
+ * conversation must not grow a control for a capability it is not using.
  *
  * It registers its own locale namespace and lets the seat project `t`, which is how the
  * official same-header cells stay translatable without re-registering on a locale change.
@@ -28,11 +29,15 @@ window.__ModuleLoader__.load({
     const CHANNEL = '/trellis-statusline'
     const ENDPOINT_READ = 'task/read'
 
-    /** The seat: a right-aligned list of session utilities. */
-    const SEAT = 'conversation.session.header.utilities'
+    /** The seat: title-adjacent session actions, in ascending order. */
+    const SEAT = 'conversation.session.header.actions'
     const CELL_ID = 'trellis-statusline'
-    /** Between the shipped session-log entry (0) and a third-party sidebar toggle (10). */
-    const CELL_ORDER = 5
+    /**
+     * Right of the session-preset selector (`agent-preset`, order -10) and left of the
+     * background-jobs counter (`job-list`, order 20). The title-adjacent row has room for a
+     * task title where the right-aligned utilities row does not.
+     */
+    const CELL_ORDER = 10
 
     const REFRESH_INTERVAL_MS = 10_000
 
