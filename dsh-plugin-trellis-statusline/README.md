@@ -48,8 +48,10 @@ session, so a `task.py start` or `task.py archive` shows up within one poll.
   and holds no write path — Trellis data cannot be modified by this plugin, and the self-check
   asserts it, including a before/after hash comparison of a workspace's `.trellis/`.
 - It does not start, switch or archive tasks; that stays `task.py`'s job.
-- It only shows `in_progress` and `planning` tasks. A task in `review` is not shown — widen
-  `RUNNING_STATUSES` in `lib/index.js` if that state should count.
+- It only *scans* for `in_progress` and `planning` tasks, so a task sitting in `review` is not
+  proposed by the workspace scan — widen `RUNNING_STATUSES` in `lib/index.js` if that state should
+  count. The session pointer is authoritative and unfiltered, so a pointed-at `review` task does
+  display, with its own word (`审核中` / `in review`).
 - It shows nothing in the **hero** (new-session) phase, because the whole session header —
   including this seat — is not rendered there. This is a known, accepted limitation.
 - It does not repeat what dsh already shows (model, tokens, elapsed time).
@@ -78,14 +80,14 @@ The plugin stores nothing and has nothing to configure, so uninstalling needs no
 
 ```bash
 node --check lib/index.js && node --check lib/client.js   # both halves parse
-npm test                                                  # 100 assertions, three harnesses
+npm test                                                  # 102 assertions, three harnesses
 ```
 
 | Harness | Covers |
 |---|---|
-| `test/host.test.mjs` | the four-step resolution against throwaway workspaces — pointer first (and unfiltered), scan fallback, rank and tie-break, "never started ⇒ not a candidate" with an A/B on the single `branch` field, every empty state, the `unknown-endpoint` error, "no write API in the source", and a before/after hash comparison proving a read leaves `.trellis/` byte-identical |
+| `test/host.test.mjs` | the four-step resolution against throwaway workspaces — pointer first (and unfiltered), scan fallback, rank and tie-break, "never started ⇒ not a candidate" with an A/B on the single `branch` field, `tasks/archive` skipped, every empty state, the `unknown-endpoint` error, "no write API in the source", and a before/after hash comparison proving a read leaves `.trellis/` byte-identical |
 | `test/client.test.mjs` | bundle id = package name, only `react` required, the seat (slot key vs cell id vs order), the locale namespace handed to the seat, stylesheet lifecycle, a refused locale namespace degrading to the local dictionaries, cross-half channel/endpoint agreement |
-| `test/cell.test.mjs` | the real cell under a minimal hook runtime — `[P1] title · state`, `null` for every failure mode, an unknown status, the 10 s poll, and interval disposal on both session switch and unmount |
+| `test/cell.test.mjs` | the real cell under a minimal hook runtime — `[P1] title · state`, `null` for every failure mode, an unlisted status falling back to a generic word, `review` getting its own, the 10 s poll, and interval disposal on both session switch and unmount |
 
 Without a browser, the channel answers at `POST {channel}/{endpoint}`:
 

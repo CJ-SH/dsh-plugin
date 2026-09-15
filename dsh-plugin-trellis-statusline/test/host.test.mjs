@@ -236,6 +236,13 @@ check('the same task counts once it has been started', (await read(SESSION)).val
   priority: 'P1',
 })
 
+// Trellis' own walk skips the `archive` directory (`task_store.py`: `candidate.name ==
+// DIR_ARCHIVE`), and so must this one — a started task parked under it is not active.
+const wsArchivedDir = await makeWorkspace('archived-dir')
+pointAt(wsArchivedDir)
+await writeTask(wsArchivedDir, join('archive', '2026-09', '09-15-done'), taskJson('Archived by hand', 'in_progress'))
+check('a task under tasks/archive is not a candidate', await read(SESSION), { ok: true, value: { status: 'none' } })
+
 const wsNoTrellis = join(scratch, 'no-trellis')
 await mkdir(wsNoTrellis, { recursive: true })
 pointAt(wsNoTrellis)

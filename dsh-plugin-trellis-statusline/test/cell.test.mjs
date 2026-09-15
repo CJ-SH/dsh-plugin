@@ -207,6 +207,12 @@ reply = { ok: true, value: { status: 'ok', task: { ...TASK, status: 'archived' }
 intervals[0].callback()
 check('an unknown status falls back to a generic word', flatten(await settle({ sessionId: SESSION })), '[P1] Trellis statusline plugin for dsh web · 未知状态')
 
+// `review` is a real Trellis status, reachable through the authoritative (and unfiltered)
+// session-pointer path even though the scan never proposes it.
+reply = { ok: true, value: { status: 'ok', task: { ...TASK, status: 'review' } } }
+intervals[0].callback()
+check('a review task gets its own word, not the generic one', flatten(await settle({ sessionId: SESSION })), '[P1] Trellis statusline plugin for dsh web · 审核中')
+
 reply = { ok: true, value: { status: 'ok', task: { id: 'x', title: 'No priority', status: 'planning' } } }
 intervals[0].callback()
 check('a task without a priority drops the bracket', flatten(await settle({ sessionId: SESSION })), 'No priority · 规划中')

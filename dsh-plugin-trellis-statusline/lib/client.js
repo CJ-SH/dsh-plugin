@@ -42,13 +42,16 @@ window.__ModuleLoader__.load({
     const REFRESH_INTERVAL_MS = 10_000
 
     /**
-     * Statuses this seat has words for. Anything else — a pointed-at task can legitimately
-     * be `completed` or archived — falls back to a generic word instead of leaking a raw
-     * token into the header.
+     * Statuses this seat has words for. Trellis' full vocabulary is
+     * `planning | in_progress | review | completed` (`task.py`'s `--status` help), and only
+     * the first two are ever *scanned* for; but the session pointer is authoritative and
+     * unfiltered, so it can legitimately deliver `review` or `completed`. Anything outside
+     * this table falls back to a generic word rather than leaking a raw token into the header.
      */
     const STATE_KEYS = {
       in_progress: 'state.in_progress',
       planning: 'state.planning',
+      review: 'state.review',
       completed: 'state.completed',
     }
     const STATE_UNKNOWN = 'state.unknown'
@@ -57,6 +60,7 @@ window.__ModuleLoader__.load({
     const zh = {
       'state.in_progress': '进行中',
       'state.planning': '规划中',
+      'state.review': '审核中',
       'state.completed': '已完成',
       'state.unknown': '未知状态',
     }
@@ -64,6 +68,7 @@ window.__ModuleLoader__.load({
     const en = {
       'state.in_progress': 'in progress',
       'state.planning': 'planning',
+      'state.review': 'in review',
       'state.completed': 'completed',
       'state.unknown': 'unknown state',
     }

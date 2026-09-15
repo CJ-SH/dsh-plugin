@@ -42,6 +42,15 @@ const TASKS_DIR = 'tasks'
 const RUNTIME_DIR = '.runtime'
 const SESSIONS_DIR = 'sessions'
 
+/**
+ * `DIR_ARCHIVE` from `.trellis/scripts/common/task_store.py`, which skips this directory when
+ * it walks tasks. Archived tasks also live one level deeper
+ * (`tasks/archive/<month>/<task>`), so a scan that reads only the immediate children of
+ * `tasks` already misses them — this makes the intent explicit instead of depending on that
+ * directory layout.
+ */
+const ARCHIVE_DIR = 'archive'
+
 const isRecord = (value) => typeof value === 'object' && value !== null && !Array.isArray(value)
 const text = (value) => (typeof value === 'string' ? value.trim() : '')
 
@@ -212,6 +221,7 @@ async function scanTasks(cwd) {
   let best
   let bestRank = Number.POSITIVE_INFINITY
   for (const dirName of await listDirectories(tasksRoot)) {
+    if (dirName === ARCHIVE_DIR) continue
     const source = await readJson(join(tasksRoot, dirName, 'task.json'))
     const task = parseTask(dirName, source)
     if (task === undefined) continue

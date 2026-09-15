@@ -129,13 +129,14 @@ check(
 )
 check(
   'every state the pill can show is translated',
-  ['in_progress', 'planning', 'completed', 'unknown'].every((state) => `state.${state}` in dictionaries[0].dicts.zh),
+  ['in_progress', 'planning', 'review', 'completed', 'unknown'].every((state) => `state.${state}` in dictionaries[0].dicts.zh),
   true,
 )
 check('the state words are the ones the pill shows', [
   dictionaries[0].dicts.zh['state.in_progress'],
   dictionaries[0].dicts.zh['state.planning'],
-], ['进行中', '规划中'])
+  dictionaries[0].dicts.zh['state.review'],
+], ['进行中', '规划中', '审核中'])
 
 // --- Stylesheet lifecycle ----------------------------------------------------------------
 check('stylesheet injected once', styleTags.length, 1)
