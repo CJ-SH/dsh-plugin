@@ -1,3 +1,6 @@
 [submodule "dsh-plugin-ollama-usage"]
 	path = dsh-plugin-ollama-usage
 	url = ./dsh-plugin-ollama-usage
+[submodule "dsh-plugin-trellis-statusline"]
+	path = dsh-plugin-trellis-statusline
+	url = https://github.com/CJ-SH/dsh-plugin-trellis-statusline.git
