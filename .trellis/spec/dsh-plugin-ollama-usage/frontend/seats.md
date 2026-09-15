@@ -35,6 +35,33 @@ seat that is not rendered yet stays empty.
 A settings card appears only when **both** halves agree: the host registers the settings namespace
 and the browser registers a cell under the same key.
 
+## Session-header seats
+
+> Measured against `dsh 0.1.5-rc.2` on 2026-09-15 while building `dsh-plugin-trellis-statusline`.
+
+The `conversation.session.header.*` seats are declared by one entry in
+`conversation.session.header` and share a single contract:
+
+| Seat | Kind | Occupied by |
+|---|---|---|
+| `conversation.session.header.actions` | list | official `job-list` (`order: 20`) |
+| `conversation.session.header.utilities` | list, right-aligned, ascending `order` | `open-in-app` (-10), `session-log-download` (default 0), third-party toggles around 10 |
+
+- **The seat's standard props carry the session.** `sessionId: SessionId` is among them, so a cell
+  learns which session it belongs to from its props — no store lookup and no RPC needed for that.
+- **A list seat that renders nothing hides itself.** The utilities row is styled
+  `:empty { display: none }`, so returning `null` *removes the row* rather than leaving a gap. This
+  is the rule the official jobs cell states as "an ordinary conversation never grows a control for a
+  capability it is not using", and it is why an empty state is `null` and never placeholder text.
+- **`order` is the only ordering control**, and it is optional (default 0).
+- **The whole header — and therefore every seat inside it — is absent in the hero (new-session)
+  phase.** A surface that must be visible before the first message needs a second seat
+  (`shell.overlay`); do not expect a header seat to cover that phase.
+- **Localization**: register dictionaries with `ctx.locale.register(ns, { zh, en })` and pass the
+  same `ns` as the registration's `locale` option. The owner then projects a namespace-bound `t`
+  into the cell's props, so a locale change follows without re-registering. A cell cannot assume
+  `t` arrives — keep the same dictionary reachable by hand and fall back to it.
+
 ## Overlay seats
 
 `shell.overlay` is a click-through layer, but its **direct children get `pointer-events:auto`

@@ -10,13 +10,19 @@
 This package is at v1 and will keep changing, so this layer deliberately holds **only what a
 rewrite should not have to rediscover** — the platform contracts and the failures they caused.
 
+It is the layer for **the plugin platform itself**, not for one plugin's product decisions: the
+contracts below were re-measured while building the sibling package
+`dsh-plugin-trellis-statusline`, and they apply to any dsh plugin in this workspace. Keep adding
+here rather than duplicating a second copy of the same platform facts.
+
 | In spec (settled) | Deliberately not in spec yet (v1, still moving) |
 |---|---|
 | package / manifest / patch shape, install and verify commands | component structure and props style |
 | bundle format, host module surface, service declaration | hook patterns, subscription and measurement effects |
 | RPC channel, envelope, endpoint rules, cross-half constants | the shared store, refcounted polling, phase model, card state machine |
-| seat registration rules and the three seats in use | stylesheet contents, class names, layout measurement |
+| seat registration rules and the seats in use (dock, overlay, settings, session header) | stylesheet contents, class names, layout measurement |
 | self-check harness style, code and commit style | credential-mode UX details |
+| host session → workspace resolution (`sessions` / `workspaceRegistry`) | any one plugin's own resolution policy |
 
 The deferred material is not lost — it is in the code (`lib/client.js`), in git history, and in the
 research that produced the package:
@@ -68,8 +74,8 @@ Each row is an observed failure, not a style preference.
 | Guide | Covers |
 |---|---|
 | [Plugin Anatomy](./plugin-anatomy.md) | Workspace and package layout, manifest, loader patch, install and verify commands, naming |
-| [Two Halves Contract](./halves-contract.md) | Host module surface, bundle format, service declaration, private RPC, credential boundary |
-| [Seats](./seats.md) | How UI is placed: registration rules, `name` vs `id`/`key`, the seats in use |
+| [Two Halves Contract](./halves-contract.md) | Host module surface, bundle format, service declaration, private RPC, host session → workspace resolution, credential boundary |
+| [Seats](./seats.md) | How UI is placed: registration rules, `name` vs `id`/`key`, the seats in use, the session-header seats |
 | [Self-Check and Verification](./self-check.md) | Harness style, release gate, code style, errors and secrets, forbidden patterns, git |
 | [Type Safety](./type-safety.md) | No-TypeScript conventions, runtime narrowing, boundary rules, wire discipline |
 
@@ -83,3 +89,5 @@ Each row is an observed failure, not a style preference.
 | `dsh-plugin-ollama-usage/lib/client.js` | browser half: bundle wrapper, `inject`, seat registrations, UI |
 | `dsh-plugin-ollama-usage/test/*.test.mjs` | the four self-check harnesses |
 | `dsh-plugin-ollama-usage/README.md` | user-facing surfaces, credential modes, install |
+| `dsh-plugin-trellis-statusline/lib/index.js` | the read-only host half the session → cwd → task contracts were measured against |
+| `dsh-plugin-trellis-statusline/lib/client.js` | a one-cell session-header contribution, including the locale-namespace and `t` convention |

@@ -78,6 +78,30 @@ const answered = await ctx.connection.rpc.call('/ollama-usage', endpoint, payloa
 - Channel name, settings namespace and endpoint names are **duplicated constants** in both halves.
   `test/client.test.mjs` compares them, so renaming in one file fails the suite.
 
+## Host session → workspace resolution
+
+> Measured against `dsh 0.1.5-rc.2` on 2026-09-15 while building `dsh-plugin-trellis-statusline`.
+
+A plugin that needs the working directory behind a client-supplied `sessionId` does **not** have to
+ask the browser for it. The Host has two synchronous paths, and they are enough between them:
+
+| Path | Covers | Access |
+|---|---|---|
+| `ctx.sessions.get(id).header.cwd` | live sessions | hard dependency — declare `sessions` in `inject` |
+| the `sessionIds` → `path` index of `ctx.workspaceRegistry.list()` | persisted sessions too; the registry builds one canonical-cwd header index over stored session headers at startup | optional — `ctx.get('workspaceRegistry')` |
+
+- `SessionHeader.cwd` is **optional**. A session without one — a subagent, for instance — simply
+  resolves to nothing. That is an empty result, not an error, and the workspace registry is the
+  reason a *closed* session still resolves at all.
+- `workspaceRegistry` is deliberately the optional one: a plugin that declares it as a hard
+  dependency silently registers nothing on a profile that does not mount it.
+- **One id, four places.** A `sessionId` is `session-<uuid>`; the same string is what
+  `@deepseek-ai/dsh-shell-env` exports as `DSH_SESSION_ID`
+  (`values.DSH_SESSION_ID = execution.agent.session.header.id`), what names the on-disk directory
+  `~/.dsh/sessions/<workspace-slug>/session-<uuid>/`, and what a Trellis runtime pointer is keyed
+  by. So a session can be correlated across the browser, a tool subprocess and the filesystem
+  without any id mapping.
+
 ## Credential boundary
 
 A plugin never accepts a foreign credential reference from the client:

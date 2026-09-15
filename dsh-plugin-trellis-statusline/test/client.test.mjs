@@ -1,0 +1,205 @@
+/**
+ * Client-half harness. Loads the real bundle through a fake module loader and mounts it
+ * against a fake cordis context, then asserts the seat it claims, the dictionaries it
+ * registers and the lifecycle of the stylesheet it injects.
+ *
+ * This is the check that would have caught the slot-name mistake (`name` must be the slot
+ * key, `id` is the plugin's own cell) and a locale namespace that does not match the one
+ * the seat projects into `t`.
+ *
+ *   node test/client.test.mjs
+ */
+import { readFile } from 'node:fs/promises'
+
+const clientUrl = new URL('../lib/client.js', import.meta.url)
+const hostUrl = new URL('../lib/index.js', import.meta.url)
+const packageJson = JSON.parse(await readFile(new URL('../package.json', import.meta.url), 'utf8'))
+
+const results = []
+const check = (label, actual, expected) => {
+  results.push({ label, ok: JSON.stringify(actual) === JSON.stringify(expected), actual, expected })
+}
+
+// --- Fake module loader + baseline react ------------------------------------------------
+let factory = null
+let registeredId = null
+globalThis.window = {
+  __ModuleLoader__: {
+    load(entry) {
+      registeredId = entry.id
+      factory = entry.factory
+    },
+  },
+}
+
+const reactStub = {
+  createElement: (type, props, ...children) => ({ type, props: props ?? {}, children: children.flat(Infinity) }),
+  useState: (initial) => [typeof initial === 'function' ? initial() : initial, () => undefined],
+  useEffect: () => undefined,
+  useLayoutEffect: () => undefined,
+}
+
+// --- Fake document (the bundle injects its own stylesheet) ------------------------------
+const styleTags = []
+globalThis.document = {
+  createElement(tag) {
+    const node = { tag, dataset: {}, textContent: '', removed: false, remove() { this.removed = true } }
+    return node
+  },
+  head: { append: (node) => styleTags.push(node) },
+  querySelector: () => null,
+}
+
+await import(clientUrl.href)
+check('bundle registered a factory', typeof factory, 'function')
+check('bundle id equals the package name', registeredId, packageJson.name)
+
+const required = []
+const exported = factory((request) => {
+  required.push(request)
+  if (request === 'react') return reactStub
+  throw new Error(`unexpected require("${request}")`)
+})
+check('bundle requires only react', required, ['react'])
+check('bundle exports apply + inject', [typeof exported.apply, Array.isArray(exported.inject)], ['function', true])
+check('declared services', exported.inject, ['slots', 'locale', 'connection', 'timer'])
+
+// --- Fake cordis context ----------------------------------------------------------------
+const injected = []
+const registrations = []
+const dictionaries = []
+const intervals = []
+const services = {
+  slots: {
+    inject(key, callback) {
+      injected.push(key)
+      return callback()
+    },
+    register(options, component) {
+      registrations.push({ options, component })
+      return () => undefined
+    },
+  },
+  locale: {
+    getLocale: () => ({ active: 'zh' }),
+    register(ns, dicts) {
+      dictionaries.push({ ns, dicts })
+      return () => undefined
+    },
+  },
+  connection: { rpc: { call: async () => ({ ok: true, value: { status: 'none' } }) } },
+  timer: { interval: () => () => undefined },
+}
+const effects = []
+const ctx = {
+  ...services,
+  get: (serviceName) => services[serviceName],
+  effect(callback, label) {
+    const disposer = callback()
+    effects.push({ label, disposer })
+    return disposer
+  },
+  interval(callback, delay) {
+    intervals.push({ delay })
+    return () => undefined
+  },
+}
+
+exported.apply(ctx)
+
+check('claims exactly one seat', injected, ['conversation.session.header.utilities'])
+check('registered one entry', registrations.length, 1)
+
+const entry = registrations[0].options
+check('seat: slot name is the seat key', entry.name, 'conversation.session.header.utilities')
+check('seat: cell id is the plugin id', entry.id, 'trellis-statusline')
+check('seat: order', entry.order, 5)
+check('seat: locale namespace matches the registered one', entry.locale, dictionaries[0]?.ns)
+check('seat registered a component', typeof registrations[0].component, 'function')
+
+// --- Dictionaries ------------------------------------------------------------------------
+check('one locale namespace is registered', dictionaries.length, 1)
+check('the namespace is the plugin id', dictionaries[0].ns, 'trellis-statusline')
+check('both languages are present', Object.keys(dictionaries[0].dicts).sort(), ['en', 'zh'])
+check(
+  'the two dictionaries have identical key sets',
+  Object.keys(dictionaries[0].dicts.zh).sort(),
+  Object.keys(dictionaries[0].dicts.en).sort(),
+)
+check(
+  'every state the pill can show is translated',
+  ['in_progress', 'planning', 'completed', 'unknown'].every((state) => `state.${state}` in dictionaries[0].dicts.zh),
+  true,
+)
+check('the state words are the ones the pill shows', [
+  dictionaries[0].dicts.zh['state.in_progress'],
+  dictionaries[0].dicts.zh['state.planning'],
+], ['进行中', '规划中'])
+
+// --- Stylesheet lifecycle ----------------------------------------------------------------
+check('stylesheet injected once', styleTags.length, 1)
+check('stylesheet is tagged with the plugin', styleTags[0].dataset.plugin, packageJson.name)
+check('stylesheet carries the pill rules', styleTags[0].textContent.includes('.trellis-statusline'), true)
+check('stylesheet carries the status rules', styleTags[0].textContent.includes('[data-status='), true)
+check('stylesheet uses theme tokens only', /var\(--dsw-[a-z0-9-]+\)/.test(styleTags[0].textContent), true)
+
+const sheet = effects.find((item) => String(item.label).includes('stylesheet'))
+check('stylesheet disposer removes the tag', (() => {
+  sheet.disposer()
+  return styleTags[0].removed
+})(), true)
+
+// --- Cross-half contract: every endpoint the client calls exists on the host -------------
+const clientSource = await readFile(clientUrl, 'utf8')
+const hostSource = await readFile(hostUrl, 'utf8')
+const endpointsIn = (source) => [...new Set([...source.matchAll(/'([a-z]+\/[a-z]+)'/g)].map((match) => match[1]))].sort()
+check('client calls exactly the endpoints the host handles', endpointsIn(clientSource), endpointsIn(hostSource))
+check('the endpoint set is the expected one', endpointsIn(hostSource), ['task/read'])
+check('client and host agree on the channel', [
+  clientSource.includes("const CHANNEL = '/trellis-statusline'"),
+  hostSource.includes("const CHANNEL = '/trellis-statusline'"),
+], [true, true])
+check('apply starts no poll of its own', intervals.length, 0)
+check('the client owns the poll interval', clientSource.includes('REFRESH_INTERVAL_MS = 10_000'), true)
+check('the host half holds no timer at all', clientSource.includes('ctx.interval(') && !hostSource.includes('setInterval'), true)
+check('the client declares no npm dependency', packageJson.dependencies ?? null, null)
+
+// --- A refused locale namespace costs the dictionaries, not the cell ---------------------
+const logged = []
+const originalError = console.error
+console.error = (message) => logged.push(String(message))
+const stylesheetsBefore = styleTags.length
+const registrationsBefore = registrations.length
+let survived = true
+try {
+  exported.apply({
+    ...services,
+    locale: {
+      getLocale: () => ({ active: 'zh' }),
+      register() {
+        throw new Error('namespace "trellis-statusline" is already registered')
+      },
+    },
+    get: (serviceName) => services[serviceName],
+    effect: (callback) => callback(),
+    interval: () => () => undefined,
+  })
+} catch {
+  survived = false
+}
+console.error = originalError
+check('apply survives a refused locale namespace', survived, true)
+check('the failure is logged once', logged.length, 1)
+check('the log names the plugin', logged[0]?.startsWith('[trellis-statusline]'), true)
+check('the stylesheet is still injected', styleTags.length - stylesheetsBefore, 1)
+check('the seat is still claimed', registrations.length - registrationsBefore, 1)
+
+const failed = results.filter((item) => !item.ok)
+for (const item of results) {
+  console.log(
+    `${item.ok ? 'PASS' : 'FAIL'}  ${item.label}` +
+      (item.ok ? '' : `\n      expected ${JSON.stringify(item.expected)}\n      actual   ${JSON.stringify(item.actual)}`),
+  )
+}
+console.log(`\n${results.length - failed.length}/${results.length} passed`)
+process.exitCode = failed.length === 0 ? 0 : 1

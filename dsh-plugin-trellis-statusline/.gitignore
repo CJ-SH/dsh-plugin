@@ -1,0 +1,4 @@
+# The host harness builds throwaway workspaces here and removes them again on the way out
+# (including at startup, so a crashed run cleans itself up on the next one). This keeps a
+# half-finished run from ever being committed.
+test/.tmp/
