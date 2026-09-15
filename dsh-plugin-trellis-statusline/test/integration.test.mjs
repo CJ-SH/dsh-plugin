@@ -220,7 +220,9 @@ const findByClass = (node, className) => {
 }
 
 const pill = await settle()
-check('the Host reply renders a child pill end to end', flatten(pill), 'Release 0.2 › [P2] Wire the importer · 进行中 · 子任务')
+// R10: the root's title no longer prefixes the pill; the role chip carries the relationship.
+check('the Host reply renders a child pill end to end', flatten(pill), '[P2] Wire the importer · 进行中 · 子任务')
+check('no root-title prefix survives the round trip', flatten(pill).includes('›'), false)
 check('the reply drives the role attribute too', findByClass(pill, 'trellis-statusline')?.props?.['data-role'], 'child')
 check('the reply makes the pill clickable', findByClass(pill, 'trellis-statusline-pill')?.type, 'button')
 

@@ -39,6 +39,15 @@ window.__ModuleLoader__.load({
      */
     const CELL_ORDER = 10
 
+    /**
+     * The second seat: full-width entries above the composer card. It is session-scoped and a
+     * blank session exists in the Hero, so the session id arrives as a prop there too.
+     */
+    const HERO_SEAT = 'conversation.input.dock'
+    const HERO_CELL_ID = 'trellis-statusline-hero'
+    /** Above the dock's other entries (todo 0, goal 10, queue 20, git-graph 100). */
+    const HERO_CELL_ORDER = -10
+
     const REFRESH_INTERVAL_MS = 10_000
 
     /**
@@ -99,7 +108,7 @@ window.__ModuleLoader__.load({
       'button.trellis-statusline-pill{cursor:pointer}',
       'button.trellis-statusline-pill:hover{background:var(--dsw-alias-bg-layer-1);color:var(--dsw-alias-label-primary)}',
       'button.trellis-statusline-pill:focus-visible{outline:2px solid var(--dsw-alias-brand-primary);outline-offset:1px}',
-      '.trellis-statusline-parent{min-width:0;overflow:hidden;text-overflow:ellipsis;opacity:.75}',
+      '.trellis-statusline-dock{box-sizing:border-box;width:100%;max-width:var(--dsh-chat-content-width,720px);margin:0 auto;padding:0 16px 4px;display:flex;justify-content:center}',
       '.trellis-statusline-priority{flex:none;color:var(--dsw-alias-brand-primary);font-weight:500;font-variant-numeric:tabular-nums}',
       '.trellis-statusline-title{min-width:0;overflow:hidden;text-overflow:ellipsis}',
       '.trellis-statusline-separator{flex:none;opacity:.6}',
@@ -111,6 +120,7 @@ window.__ModuleLoader__.load({
       '.trellis-statusline-chevron{flex:none;width:5px;height:5px;margin-left:2px;border-right:1.5px solid currentColor;border-bottom:1.5px solid currentColor;transform:rotate(45deg) translate(-1px,-1px)}',
       '.trellis-statusline-chevron[data-open="true"]{transform:rotate(-135deg) translate(-1px,-1px)}',
       '.trellis-statusline-menu{position:absolute;top:calc(100% + 6px);left:0;z-index:100;box-sizing:border-box;min-width:240px;max-width:min(460px,80vw);max-height:min(60vh,420px);overflow:auto;margin:0;padding:4px;list-style:none;background:var(--dsw-alias-bg-overlay);border:.5px solid var(--dsw-alias-border-l1);border-radius:12px;box-shadow:var(--dsw-elevation-prominent,0 8px 24px rgb(0 0 0 / 18%));color:var(--dsw-alias-label-primary)}',
+      '.trellis-statusline-menu[data-placement="up"]{top:auto;bottom:calc(100% + 6px)}',
       '.trellis-statusline-menurow{box-sizing:border-box;align-items:center;gap:6px;padding:3px 8px;border-radius:6px;white-space:nowrap;overflow:hidden;display:flex}',
       '.trellis-statusline-menurow:not([data-depth="0"]){border-left:1px solid var(--dsw-alias-border-l1)}',
       '.trellis-statusline-menurow[data-current="true"]{background:var(--dsw-alias-bg-layer-2);color:var(--dsw-alias-brand-primary)}',
@@ -251,21 +261,31 @@ window.__ModuleLoader__.load({
       }
 
       /**
-       * The session-header cell.
+       * The pill's state and markup, shared by both seats.
        *
-       * @param props - runtime slot currency plus the namespace translator. `t` is used when
-       *   the seat projects it; the same dictionaries are read directly otherwise, so a seat
-       *   that does not project a translator degrades to the locale captured at apply time
-       *   instead of blanking out or throwing.
-       * @returns the pill, or `null` when this workspace has no task to show.
+       * A hook rather than a component: both seats need the same polling, the same dismissal
+       * listeners and the same markup, and a component boundary would only add a nesting level
+       * that changes nothing — while forcing the Hero seat to render it in order to decide
+       * whether to show anything at all.
+       *
+       * @param sessionId - the session whose workspace to report on.
+       * @param t - the seat's namespace translator, when it projects one; the same dictionaries
+       *   are read directly otherwise, so a seat without a translator degrades to the locale
+       *   captured at apply time instead of blanking out or throwing.
+       * @param placement - which way the dropdown opens (`down` in the header, `up` above the
+       *   composer, where opening downward would cover the input).
+       * @param enabled - when false no request is made at all, so the seat that is not showing
+       *   costs nothing. Effects still run unconditionally, as React requires.
+       * @returns the pill element, or `null` when there is nothing to show.
        */
-      function StatuslineCell({ sessionId, t }) {
+      function useTaskPill(sessionId, t, placement, enabled) {
         const [task, setTask] = React.useState(null)
         const [open, setOpen] = React.useState(false)
         const rootRef = React.useRef(null)
         const say = typeof t === 'function' ? t : (key) => copy[key] ?? key
 
         React.useEffect(() => {
+          if (!enabled) return undefined
           let live = true
           const refresh = () => {
             request(ENDPOINT_READ, { sessionId }).then(
@@ -285,7 +305,7 @@ window.__ModuleLoader__.load({
             live = false
             stop()
           }
-        }, [sessionId])
+        }, [sessionId, enabled])
 
         // Another session's tree has nothing to do with an open menu.
         React.useEffect(() => {
@@ -323,11 +343,6 @@ window.__ModuleLoader__.load({
         const bracket = task.priority.length === 0 ? null : `[${task.priority}]`
 
         const parts = []
-        if (role === 'child') {
-          // The root's title, not the immediate parent's: the label vocabulary has no third
-          // level, so `›` always points at the one parent task of the whole tree.
-          parts.push(h('span', { className: 'trellis-statusline-parent', key: 'parent' }, `${tree.title} › `))
-        }
         if (bracket !== null) parts.push(h('span', { className: 'trellis-statusline-priority', key: 'priority' }, bracket), ' ')
         parts.push(h('span', { className: 'trellis-statusline-title', key: 'title' }, task.title))
         parts.push(h('span', { className: 'trellis-statusline-separator', key: 'separator' }, ' · '))
@@ -383,7 +398,16 @@ window.__ModuleLoader__.load({
               ...rowParts,
             )
           })
-          menu = h('ul', { className: 'trellis-statusline-menu', key: 'menu', 'aria-label': say('menu.aria') }, rows)
+          menu = h(
+            'ul',
+            {
+              className: 'trellis-statusline-menu',
+              key: 'menu',
+              'data-placement': placement ?? 'down',
+              'aria-label': say('menu.aria'),
+            },
+            rows,
+          )
         }
 
         return h(
@@ -400,10 +424,49 @@ window.__ModuleLoader__.load({
         )
       }
 
+      /** The session-header cell: the pill as the header's title-adjacent action. */
+      function StatuslineCell({ sessionId, t }) {
+        return useTaskPill(sessionId, t, 'down', true)
+      }
+
+      /**
+       * The new-session cell.
+       *
+       * A blank session is shown as the Hero, and the shell hides the entire session header
+       * there (`.wSkVaW_headerHidden{display:none}`) — the header cell stays *mounted*, so it
+       * cannot be the thing that decides to appear elsewhere. This second seat above the
+       * composer therefore keys off the same fact the shell itself uses to pick the Hero:
+       * `SessionListState.byId[id].blank`, which `ConversationRoot` reads as `summaryBlank`.
+       *
+       * Not blank ⇒ `null`, so an ordinary conversation never grows a second pill — and
+       * `enabled` keeps that seat from polling at all while it is hidden. No session at all ⇒
+       * also `null`, and there is no workspace to report on anyway.
+       */
+      function HeroStatuslineCell({ sessionId, t, useSessions }) {
+        // Guarded like `t`: the seat projects this hook today, and if a future seat stops
+        // projecting it the right degradation is "no Hero pill", not a dead client half. The
+        // prop's identity is fixed by the seat, so the call is never actually conditional.
+        const blank =
+          typeof useSessions === 'function'
+            ? useSessions((state) => (sessionId === undefined ? undefined : state.byId[sessionId]?.blank))
+            : undefined
+        const pill = useTaskPill(sessionId, t, 'up', blank === true)
+        if (blank !== true || pill === null) return null
+        return h('div', { className: 'trellis-statusline-dock' }, pill)
+      }
+
       // `slots.inject` defers registration until the seat exists; a seat that was renamed or
       // is never rendered leaves this plugin inert instead of failing the client half.
       ctx.slots.inject(SEAT, () =>
         ctx.slots.register({ name: SEAT, id: CELL_ID, order: CELL_ORDER, locale: CELL_ID }, StatuslineCell),
+      )
+      // `order: -10` puts the status line at the top of the dock group (todo 0, goal 10,
+      // queue 20, git-graph 100) — in the Hero those others are empty anyway.
+      ctx.slots.inject(HERO_SEAT, () =>
+        ctx.slots.register(
+          { name: HERO_SEAT, id: HERO_CELL_ID, order: HERO_CELL_ORDER, locale: CELL_ID },
+          HeroStatuslineCell,
+        ),
       )
     }
 

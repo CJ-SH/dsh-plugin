@@ -69,6 +69,38 @@ The `conversation.session.header.*` seats are declared by one entry in
   into the cell's props, so a locale change follows without re-registering. A cell cannot assume
   `t` arrives — keep the same dictionary reachable by hand and fall back to it.
 
+## The blank-session (Hero) phase
+
+> Measured against `dsh 0.1.5-rc.2` on 2026-09-15 while building `dsh-plugin-trellis-statusline`.
+
+The Hero — the new-session view before the first message — is where a header-seat plugin silently
+disappears, and two facts about it are easy to get backwards:
+
+- **A blank session is a real session.** `ConversationRoot` computes
+  `hero = sessionId === undefined || shellPhase === "blank" && (openState === "open" || summaryBlank === true)`.
+  So the usual "new session" flow has a real id, and **session-scoped seats are alive in the Hero** —
+  `conversation.input.dock` (list, `scope: session`, "Full-width entries above the composer card",
+  `replaceRisk: none`) hands its cells `sessionId` directly. Prefer that over `shell.overlay`:
+  an overlay needs its own `position:fixed` and pointer-events handling, and the overlay's own
+  catalog warns that a full-frame box swallows every click in the application.
+- **The header is hidden, not unmounted.** The Hero adds `.wSkVaW_headerHidden{display:none}` to the
+  whole header block, so a header cell stays *mounted* while invisible.
+
+The consequence is a rule worth remembering: **never detect the Hero with "is the header cell
+mounted?"** — a mount counter will conclude the header is showing, forever. Read the flag the shell
+itself reads instead:
+
+```js
+const blank = useSessions((s) => (sessionId === undefined ? undefined : s.byId[sessionId]?.blank))
+```
+
+`SessionListState.byId[id].blank` is the "empty-log bit" `ConversationRoot` uses as `summaryBlank`,
+and `useSessions` is a standard prop of every root- and session-scoped seat. Two caveats: guard the
+hook like any projected prop (a seat that stops projecting it should cost the surface, not the client
+half), and mind the hook rules — an early `return null` *before* other hooks would change the hook
+count when `blank` flips. Pass the flag into a shared hook as an `enabled` argument and keep every
+hook unconditional, with the effect returning early when disabled so a hidden seat costs no request.
+
 ## Popovers inside a list seat
 
 A header cell may open its own dropdown. There is no platform helper for it in a

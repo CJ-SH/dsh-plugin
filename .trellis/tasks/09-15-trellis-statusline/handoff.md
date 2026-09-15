@@ -69,35 +69,43 @@
 环、损坏节点、树 title 不截断），并对 plain + tree 两种工作区各做一次只读快照比对；
 cell harness 覆盖三种 pill 形态、下拉行列/深度/缩进/唯一高亮、三条关闭路径、卸载释放监听器。
 
+## 第三轮反馈：R10–R11（已实现，待重启目视）
+
+**R10 去掉根标题前缀**：pill 三种形态现在是
+`[P] 标题 · 状态` / `… · 父任务` / `… · 子任务` —— 没有 `›` 了。
+角色标记成为 pill 里唯一表达"它在树里"的东西，结构交给下拉。
+
+**R11 新会话界面也显示**（补上 D2 当初搁置的 hero 阶段）。调查后的关键实测：
+
+- hero 里**确实有一个真实的空会话**（`ConversationRoot`：
+  `hero = sessionId === undefined || shellPhase === "blank" && …`），所以**会话作用域席位是活的**。
+- 头部在 hero 里是**挂载但被 CSS 隐藏**（`.wSkVaW_headerHidden{display:none}`），
+  所以"头部 pill 没挂载即 hero"的计数器方案**会失效**。
+- 选 **`conversation.input.dock`**（list / session / replaceRisk none / 输入框上方整宽条目）
+  而不是 `shell.overlay`：不用自己 `position:fixed`、不用自己处理 pointer-events、
+  直接拿到 `sessionId`。
+- hero 判据用 shell 自己用的那个位：`useSessions((s) => s.byId[sessionId]?.blank)`。
+- 那颗 pill 的下拉**向上**展开（`data-placement="up"`），否则会盖住用户马上要打字的输入框。
+- 非 blank 会话渲染 `null`（否则会双 pill），且**不轮询**（`enabled=false` 时 effect 提前返回）。
+
+两处平台事实已写进 spec `seats.md` 的「The blank-session (Hero) phase」一节。
+
 ## 下一步：用户重启 dsh web 后目视
 
-1. **本工作区现在已有一个演示父子对**：`09-15-tree-demo`（父，`planning`，用 `--no-start` 建的）←
-   `09-15-trellis-statusline`（子，当前会话任务）。指针仍指向真实任务，所以重启后 pill 应显示：
+1. 普通会话 → 头部 pill，文本 `… · 子任务`（**无 `›`**）。
+2. 新建会话（hero）→ **输入框上方**出现同一颗 pill（`Tree demo` 是父任务，所以当前任务显示
+   `[P2] Trellis statusline plugin for dsh web · 进行中 · 子任务`）；点击 → 下拉**向上**展开、当前行高亮。
+3. 普通会话里输入框上方**不应**有第二颗 pill。
 
-   ```
-   Tree demo › [P2] Trellis statusline plugin for dsh web · 进行中 · 子任务
-   ```
+撤销演示任务（可选）：
+```bash
+python ./.trellis/scripts/task.py remove-subtask tree-demo 09-15-trellis-statusline
+python ./.trellis/scripts/task.py archive tree-demo --skip-branch-validation
+```
+**注意**：`task.py` 的任务参数接受**裸任务名**（后缀匹配，歧义即报错），所以不要用
+`$(ls -d .trellis/tasks/*tree-demo)` —— 那是 Git Bash 语法，在 PowerShell 里会炸。
 
-   真实 host 半边已复跑确认（`.scratch/probe-real.mjs`）：`tree.id = 09-15-tree-demo`，
-   子节点带 `current: true`。
-
-   撤销（去掉父子关系、恢复单任务形态）：
-   ```bash
-   python ./.trellis/scripts/task.py remove-subtask tree-demo 09-15-trellis-statusline
-   python ./.trellis/scripts/task.py archive tree-demo --skip-branch-validation
-   ```
-
-2. 点击 pill → 下拉两行（`[P2] Tree demo · 规划中` 在 0 缩进；
-   `[P2] Trellis statusline plugin for dsh web · 进行中` 在 1 缩进且高亮）；
-   再点 / Esc / 点外部三种方式都能关。
-
-3. 反例：`any` / `backwave` / `ecms-backend` / `agent_demo` 仍是空态（无误报）。
-
-**踩过的坑（已写进 README）**：造树的 shell 命令不要用
-`$(ls -d .trellis/tasks/*tree-demo)` —— 那是 Git Bash 语法，在 PowerShell 里 `ls` 是
-`Get-ChildItem`、`-d` 前缀匹配成 `-Depth`、glob 被当整数解析而失败。
-改用**裸任务名**（`task_utils.py:59` 的 `find_task_by_name` 支持后缀匹配且歧义即报错）：
-`task.py add-subtask tree-demo 09-15-trellis-statusline`，两种 shell 通用。
+确认后可 `python ./.trellis/scripts/task.py archive .trellis/tasks/09-15-trellis-statusline`。
 
 两项确认后可 `python ./.trellis/scripts/task.py archive .trellis/tasks/09-15-trellis-statusline`。
 

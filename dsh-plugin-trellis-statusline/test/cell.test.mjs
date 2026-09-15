@@ -156,28 +156,37 @@ const ctx = {
 
 exported.apply(ctx)
 const Cell = caught[0]?.component
+const HeroCell = caught[1]?.component
 check('captured the header cell', typeof Cell, 'function')
+check('captured the hero cell', typeof HeroCell, 'function')
 check('apply itself starts no interval', intervals.length, 0)
 
 // --- Hook runtime driver ------------------------------------------------------------------
-function render(props) {
-  active = Cell
+/** Drives any cell this bundle registered, not just the header one. */
+function renderWith(component, props) {
+  active = component
   cursor = 0
-  const store = storeOf(Cell)
+  const store = storeOf(component)
   store.pending = []
-  const tree = Cell(props)
+  const tree = component(props)
   for (const [index, effect] of store.pending) store.cleanups[index] = effect() ?? null
   return tree
 }
-async function settle(props, rounds = 12) {
-  let tree = render(props)
+async function settleWith(component, props, rounds = 12) {
+  let tree = renderWith(component, props)
   for (let index = 0; index < rounds; index += 1) {
     await new Promise((resolve) => setTimeout(resolve, 1))
     if (!dirty) break
     dirty = false
-    tree = render(props)
+    tree = renderWith(component, props)
   }
   return tree
+}
+function render(props) {
+  return renderWith(Cell, props)
+}
+async function settle(props, rounds = 12) {
+  return settleWith(Cell, props, rounds)
 }
 const flatten = (node) => {
   if (node === null || node === undefined || node === false) return ''
@@ -328,24 +337,24 @@ check('the trigger advertises the popup', [
   pillOf(asRoot)?.props?.['aria-expanded'],
 ], ['true', 'false'])
 
-// 10b. A child: the prefix is the ROOT title, and the role is the second one.
+// 10b. A child shows only its own task: the relationship lives in the role chip and the
+// dropdown, because R10 removed the `root › ` prefix.
 reply = readAs(CHILD, treeFor(CHILD.id, nestedTree))
 refresh()
 const asChild = await settle({ sessionId: SESSION })
-check('a child shows the root title then its own', flatten(asChild), 'Parent system › [P2] Beta child · 进行中 · 子任务')
-check(
-  'the prefix carries no priority bracket of its own',
-  findByClass(asChild, 'trellis-statusline-parent')?.children?.[0],
-  'Parent system › ',
-)
+check('a child shows just its own task and the subtask role', flatten(asChild), '[P2] Beta child · 进行中 · 子任务')
 
-// 10c. A grandchild is a subtask too, and its prefix is still the root — never the middle
-// layer, because the label vocabulary has no third level (R7/AC8).
+// 10c. A grandchild is a subtask too — the label vocabulary has no third level (R7/AC8).
 reply = readAs(GRAND, treeFor(GRAND.id, nestedTree))
 refresh()
 const asGrand = await settle({ sessionId: SESSION })
-check('a grandchild is labelled a subtask', flatten(asGrand), 'Parent system › [P4] Grand child · 规划中 · 子任务')
-check('its prefix is the root, not the middle layer', flatten(asGrand).startsWith('Parent system ›'), true)
+check('a grandchild is labelled a subtask', flatten(asGrand), '[P4] Grand child · 规划中 · 子任务')
+
+// R10/AC11: no pill form carries a `›`, and the prefix element is gone from the tree entirely.
+check('no pill form renders a root-title prefix', [
+  findByClass(asGrand, 'trellis-statusline-parent'),
+  [flatten(asRoot), flatten(asChild), flatten(asGrand)].some((text) => text.includes('›')),
+], [null, false])
 
 // --- 11. The dropdown --------------------------------------------------------------------
 const openMenu = async () => {
@@ -426,6 +435,50 @@ check('the last menu is open before unmounting', menuOf(stillOpen) !== null, tru
 check('and it holds document listeners', listenerCount(), 2)
 for (const cleanup of storeOf(Cell).cleanups) if (typeof cleanup === 'function') cleanup()
 check('unmount releases every document listener', listenerCount(), 0)
+
+// --- 15. The new-session seat (R11) --------------------------------------------------------
+/** A stand-in for the `useSessions` standard prop: a selector over a fixed list state. */
+const sessionsWith = (blank) => (selector) => selector({ byId: { [SESSION]: { blank } } })
+const heroProps = (blank, sessionId = SESSION) => ({
+  sessionId,
+  useSessions: sessionsWith(blank),
+})
+const dockOf = (tree) => findByClass(tree, 'trellis-statusline-dock')
+
+reply = readAs(ROOT, treeFor(ROOT.id, nestedTree))
+const beforeHero = calls.length
+const hero = await settleWith(HeroCell, heroProps(true))
+check('a blank session mounts the pill above the composer', dockOf(hero) !== null, true)
+check('the hero pill reads the same task', flatten(hero), '[P1] Parent system · 规划中 · 父任务')
+check('the hero pill requests its own session', [calls.length - beforeHero, calls.at(-1)?.payload], [1, { sessionId: SESSION }])
+check('the hero pill is the same clickable shape', pillOf(hero)?.type, 'button')
+
+const heroOpen = await (async () => {
+  pillOf(hero).props.onClick()
+  return settleWith(HeroCell, heroProps(true))
+})()
+check('the hero dropdown opens', menuOf(heroOpen) !== null, true)
+// The dock sits directly above the composer, so opening downward would cover the input.
+check('the hero dropdown opens upward', menuOf(heroOpen)?.props?.['data-placement'], 'up')
+check('while the header one still opens downward', menuOf(await openMenu())?.props?.['data-placement'], 'down')
+
+// AC13: an ordinary conversation must not grow a second pill — and must not pay for one.
+for (const cleanup of storeOf(HeroCell).cleanups) if (typeof cleanup === 'function') cleanup()
+const beforeQuiet = calls.length
+const intervalsBefore = intervals.length
+const hidden = await settleWith(HeroCell, heroProps(false))
+check('a non-blank session renders nothing above the composer', hidden, null)
+check('and makes no request while hidden', [calls.length - beforeQuiet, intervals.length - intervalsBefore], [0, 0])
+
+// AC14: no session at all, and a list state that does not know this session yet.
+check('no session renders nothing', await settleWith(HeroCell, heroProps(undefined, undefined)), null)
+check('an unknown session renders nothing', await settleWith(HeroCell, heroProps(undefined)), null)
+// A seat that stops projecting the hook must cost the Hero pill, not the client half.
+check(
+  'a seat without useSessions degrades instead of throwing',
+  await settleWith(HeroCell, { sessionId: SESSION }),
+  null,
+)
 
 const failed = results.filter((entry) => !entry.ok)
 for (const entry of results) {

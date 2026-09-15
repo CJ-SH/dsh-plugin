@@ -5,8 +5,12 @@ header.
 
 ```
 [P2] Trellis statusline plugin for dsh web · 进行中
-[P1] Release 0.2 › [P2] Wire the importer · 进行中 · 子任务
+[P1] Release 0.2 · 进行中 · 父任务
+[P2] Wire the importer · 进行中 · 子任务
 ```
+
+It shows in **two** places: the session header, and — for a new session that has no messages yet —
+above the composer, where the shell hides the whole header.
 
 ---
 
@@ -51,17 +55,17 @@ When the task belongs to a parent/child structure, the pill says so and becomes 
 |---|---|
 | standing alone | `[P2] Title · 进行中` — no role, no click target, no tab stop |
 | the tree's root | `[P1] Title · 进行中 · 父任务` |
-| anywhere else in the tree | `Root title › [P2] Title · 进行中 · 子任务` |
+| anywhere else in the tree | `[P2] Title · 进行中 · 子任务` |
 
-Three rules keep this readable on a tree of any shape:
+Two rules keep this readable on a tree of any shape:
 
 - **There are only two roles.** The tree's *top ancestor* is the one and only 父任务; every other
   member — grandchildren included — is a 子任务. No third label exists, so depth never changes the
-  wording, and `›` always leads to the root's title rather than to some middle layer.
-- **The priority bracket always belongs to the session's own task.** The `Root title ›` prefix
-  carries none, so there is never a question of which bracket means what.
+  wording.
 - **Clicking opens the real structure.** The dropdown keeps the true nesting — one indent level
-  per depth, with a guide line — and highlights the session's task.
+  per depth, with a guide line — and highlights the session's task. The pill itself deliberately
+  does not repeat the root's title: the role chip says *that* there is a tree, and the dropdown
+  says *what* it is.
 
 The tree is derived from the active task set, and the awkward cases are all pinned by tests:
 
@@ -75,6 +79,32 @@ The tree is derived from the active task set, and the awkward cases are all pinn
 | a parent cycle | terminates at a hop ceiling instead of hanging |
 | a corrupt node | drops out with its subtree; its siblings still render |
 | a tree not containing the task it describes | dropped, degrading to the plain pill |
+
+## Where it appears
+
+| Seat | When it shows |
+|---|---|
+| `conversation.session.header.actions` (id `trellis-statusline`, order 10) | an ordinary session, as the header's title-adjacent action |
+| `conversation.input.dock` (id `trellis-statusline-hero`, order -10) | a **blank** session — the new-session view, where the shell hides the entire header |
+
+Two facts make the second seat possible, and both were read from the live shell rather than
+guessed:
+
+- **A blank session exists.** `ConversationRoot` computes
+  `hero = sessionId === undefined || shellPhase === "blank" && …`, so a new session is a real
+  session with a real id — which is why a *session-scoped* seat like `conversation.input.dock`
+  is live there and hands the cell its `sessionId` as a prop. No workspace lookup, no
+  `position:fixed`, no `shell.overlay`.
+- **The header is hidden, not unmounted.** The Hero applies
+  `.wSkVaW_headerHidden{display:none}` to the header block, so the header cell is still mounted
+  while invisible — which is exactly why "show this where the header pill is not" cannot work,
+  and why the dock cell instead reads the same flag the shell uses to pick the Hero:
+  `useSessions((s) => s.byId[sessionId]?.blank)`.
+
+The dock cell renders `null` for any non-blank session, so an ordinary conversation never grows a
+second pill — and it does not even poll while hidden. Its dropdown opens **upward**
+(`data-placement="up"`): the dock sits directly above the composer, where opening downward would
+cover the input.
 
 ## What it does not do
 
@@ -115,14 +145,14 @@ The plugin stores nothing and has nothing to configure, so uninstalling needs no
 
 ```bash
 node --check lib/index.js && node --check lib/client.js   # both halves parse
-npm test                                                  # 167 assertions, four harnesses
+npm test                                                  # 185 assertions, four harnesses
 ```
 
 | Harness | Covers |
 |---|---|
 | `test/host.test.mjs` | the four-step resolution against throwaway workspaces — pointer first (and unfiltered), scan fallback, rank and tie-break, "never started ⇒ not a candidate" with an A/B on the single `branch` field, `tasks/archive` skipped — plus **every row of the tree table above**, an exact-shape assertion on the tree payload, and a before/after hash comparison (on both a plain and a tree workspace) proving a read leaves `.trellis/` byte-identical |
-| `test/client.test.mjs` | bundle id = package name, only `react` required, the seat (slot key vs cell id vs order), the locale namespace handed to the seat, stylesheet lifecycle and its rounded/tinted/dropdown rules, a refused locale namespace degrading to the local dictionaries, cross-half channel/endpoint agreement |
-| `test/cell.test.mjs` | the real cell under a minimal hook runtime — all three pill forms, a stand-alone task rendering no button/role/chevron, the dropdown's rows, depths, indentation and single highlight, all three dismissal routes (re-click, Escape, outside pointer), session switch closing it, untrusted trees degrading to the plain pill, and unmount releasing both the interval and the document listeners |
+| `test/client.test.mjs` | bundle id = package name, only `react` required, **both** seats (slot key vs cell id vs order, for header and dock), the locale namespace handed to both, stylesheet lifecycle and its rounded/tinted/dock/dropdown rules, a refused locale namespace degrading to the local dictionaries, cross-half channel/endpoint agreement |
+| `test/cell.test.mjs` | the real cells under a minimal hook runtime — all three pill forms with no `›` anywhere, a stand-alone task rendering no button/role/chevron, the dropdown's rows, depths, indentation and single highlight, all three dismissal routes (re-click, Escape, outside pointer), session switch closing it, untrusted trees degrading to the plain pill, the Hero seat appearing only for a blank session (and not polling when hidden), a seat without `useSessions` degrading instead of throwing, and unmount releasing both the interval and the document listeners |
 | `test/integration.test.mjs` | the two halves **against each other**: the real Host half reads a real `.trellis` tree on disk and that exact reply is fed to the real cell, so a wire-shape drift fails here even while both unit harnesses still pass |
 
 To see a task tree without inventing much, hang the task you are on under a throwaway parent.

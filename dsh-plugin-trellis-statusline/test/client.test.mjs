@@ -107,16 +107,29 @@ const ctx = {
 
 exported.apply(ctx)
 
-check('claims exactly one seat', injected, ['conversation.session.header.actions'])
-check('registered one entry', registrations.length, 1)
+check('claims the two seats, header first', injected, [
+  'conversation.session.header.actions',
+  'conversation.input.dock',
+])
+check('registered two entries', registrations.length, 2)
 
-const entry = registrations[0].options
-check('seat: slot name is the seat key', entry.name, 'conversation.session.header.actions')
-check('seat: cell id is the plugin id', entry.id, 'trellis-statusline')
+const bySlot = Object.fromEntries(registrations.map((item) => [item.options.name, item]))
+const header = bySlot['conversation.session.header.actions'].options
+check('header seat: slot name is the seat key', header.name, 'conversation.session.header.actions')
+check('header seat: cell id', header.id, 'trellis-statusline')
 // Right of `agent-preset` (-10) and left of `job-list` (20), both live occupants of this seat.
-check('seat: order sits between the preset selector and the jobs counter', entry.order, 10)
-check('seat: locale namespace matches the registered one', entry.locale, dictionaries[0]?.ns)
-check('seat registered a component', typeof registrations[0].component, 'function')
+check('header seat: order sits between the preset selector and the jobs counter', header.order, 10)
+check('header seat: locale namespace matches the registered one', header.locale, dictionaries[0]?.ns)
+
+const hero = bySlot['conversation.input.dock'].options
+check('hero seat: slot name is the seat key', hero.name, 'conversation.input.dock')
+check('hero seat: cell id', hero.id, 'trellis-statusline-hero')
+// Above the dock's live occupants (todo 0, goal 10, queue 20, git-graph 100).
+check('hero seat: order puts the status line first', hero.order, -10)
+check('hero seat: shares the header cell locale namespace', hero.locale, dictionaries[0]?.ns)
+
+check('both seats registered a component', registrations.map((item) => typeof item.component), ['function', 'function'])
+check('the two seats are different components', registrations[0].component === registrations[1].component, false)
 
 // --- Dictionaries ------------------------------------------------------------------------
 check('one locale namespace is registered', dictionaries.length, 1)
@@ -204,7 +217,7 @@ check('apply survives a refused locale namespace', survived, true)
 check('the failure is logged once', logged.length, 1)
 check('the log names the plugin', logged[0]?.startsWith('[trellis-statusline]'), true)
 check('the stylesheet is still injected', styleTags.length - stylesheetsBefore, 1)
-check('the seat is still claimed', registrations.length - registrationsBefore, 1)
+check('both seats are still claimed', registrations.length - registrationsBefore, 2)
 
 const failed = results.filter((item) => !item.ok)
 for (const item of results) {
