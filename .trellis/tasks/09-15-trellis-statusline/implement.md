@@ -66,6 +66,48 @@
   `.trellis/spec/dsh-plugin-ollama-usage/frontend/`（该层现在只写了契约，这几条属于新发现的平台契约）。
 - 提交顺序：插件子模块先提交 → meta-repo 记录指针 → 若注册为 submodule，同一步更新 `.gitmodules`。
 
+## 7. 增量：角色标记 + 可点击任务树（R6–R9，2026-09-15 第二轮反馈）
+
+> 前置：`design.md` §3.1–§3.5。顺序仍是 **测试先行**，每步以可验证结束。
+
+### 7.1 Host：树推导
+
+- `readActiveNodes(cwd)`：`readdir(tasks)` 跳过 `archive` → 每个目录读 `task.json` →
+  `{ id, title, status, priority, parent, childNames }`；**不套 status/branch 过滤**。
+- `effectiveParent(node, nodes)`：① 自身 `parent` 指向活动节点；② 否则唯一一个 `children` 含它的活动节点；③ 否则无父。
+- `rootOf(id, nodes)`：沿 `effectiveParent` 上溯，visited + 上限 64。
+- `collectDescendants(root, nodes)`：边 = `children` ∪ 反向 `effectiveParent`，union 去重 BFS，排除根，visited 防环。
+- `buildTree(cwd, currentId)`：根 + 后代按目录名排序转 wire；根=当前且无后代 → `undefined`（R6）。
+- `readTask` 返回值加 `tree`；`tree` 节点 title **不截断**。
+- 验证：`node --check lib/index.js` → `node test/host.test.mjs` 全绿（§3.5 那张表逐条断言）。
+
+### 7.2 Client：pill 文本 + 角色 + 下拉
+
+- 常量：`ROLE_ROOT='父任务'` 走字典；CSS 补 `.trellis-statusline-pill/-parent/-role/-chevron/-menu/-menurow/-menugroup`。
+- `decodeTask` 增补 `decodeTree`：树节点逐字段收窄，`current` 只在 `=== true` 时置位；
+  任何不合形状的树 → 当作无树（降级成今天的行为，不抛）。
+- pill 文本按 §3.1 三分支；根/子角色进 `data-role`，并给 aria/`title`。
+- 无树 → `span`（无 `onClick`/无 tabindex）；有树 → `button[type=button][aria-expanded][aria-haspopup]`。
+- 展开：`useState(false)`；effect 注册 `document` 的 `pointerdown`（落在根外则关）与 `keydown`（Esc 关），
+  成对清理；`sessionId` 变化 `setOpen(false)`。
+- 菜单：根行 + `ul` 子组（缩进 + 左导引线），命中行 `data-current="true"`。
+- 验证：`node --check lib/client.js` → `node test/client.test.mjs && node test/cell.test.mjs` 全绿 →
+  `npm test`（假 react 需补 `useRef`，假 document 需补 `addEventListener/removeEventListener`）。
+
+### 7.3 文档与提交
+
+- README 补：角色/树/交互、三种 pill 文本示例、已知上界（D7 的 NODE_LIMIT 触发条件）。
+- `design.md` §3.1–§3.5 已写；若实现中发现契约需要改，先改 design 再改代码。
+- 提交：一条 `feat:` 说明增量（断言数同步更新）。
+
+### 7.4 真机验证（用户手动重启）
+
+1. 单任务工作区（如 `dsh\any`，无活动树）→ pill 圆角灰底、**不可点击**、文本与旧版一致。
+2. 本工作区（单任务，无树）→ 同上。
+3. 造一个父子体系的工作区（或临时把某任务的 `parent` 指向父任务）→ pill 出现「子任务」+ 根标题前缀；
+   点击 → 树展开、当前行高亮、Esc/外部点击/再次点击都能关。
+4. 反例：任务树被归档后 → pill 退回单任务形态（无 `tree`）。
+
 ## 风险点与回滚
 
 | 风险点 | 回滚/兜底 |
@@ -73,3 +115,5 @@
 | 步骤 0 的会话身份结论与预期不符 | 停在步骤 0，改 design §2.1 后再继续 |
 | 安装后 dsh 起不来 | 该行 `disabled: true` 或在 profile patch 里移除该行；插件 apply 已 try/catch |
 | 席位在 dsh 升级后改名/改 kind | 客户端 `slots.inject` 找不到槽即静默不注册（不报错、不阻断） |
+| 树推导在畸形数据上挂死 | visited + 迭代上限 64；`buildTree` 整体包在 try/catch 里，异常 → 当作无树 |
+| 下拉遮挡/裁切 | 与官方 jobs cell 同款绝对定位；若真被裁，退化为"只有角色标记、无下拉"（删一个 `tree` 渲染分支即可） |

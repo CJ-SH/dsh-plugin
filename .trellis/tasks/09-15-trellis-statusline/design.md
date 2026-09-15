@@ -159,6 +159,121 @@ id 用**任务目录名**（`09-15-trellis-statusline`）——它同时是 `cur
 - 本地化：`ctx.locale.register('trellis-statusline', {zh, en})` + 注册项 `locale: 'trellis-statusline'`，
   由 owner 把绑定命名空间的 `t` 投进 props；**但不假设 `t` 一定到**——缺席时 cell 直接读同一份字典。
 
+### 3.1 角色与 pill 文本（R6/R7）
+
+角色只有两种（R7）：`root`（树的根祖先 = 唯一的「父任务」）与 `child`（其余**全部**后代，
+含孙及更深）。`role = task.id === tree.id ? 'root' : 'child'`。
+
+| 情况 | pill 文本 |
+|---|---|
+| 无任务树（R6） | `[P2] 子标题 · 进行中` ← 与旧版逐字符一致 |
+| 当前是根 | `[P1] 父标题 · 进行中 · 父任务` |
+| 当前是子/孙 | `根标题 › [P2] 子标题 · 进行中 · 子任务` |
+
+两条不变量：**优先级方括号永远指当前任务自己**（子任务行的前缀 `根标题 ›` 不带优先级，
+避免两个方括号互相干扰）；**`›` 前永远是根标题**，不是中间层标题——这与 R7"角色只有两级"一致。
+
+### 3.2 wire 契约（D6：与 pill 同源）
+
+`task/read` 的 `value` 增加可选 `tree`，**树即根节点**（子节点递归）：
+
+```jsonc
+{
+  "status": "ok",
+  "task": { "id", "title", "status", "priority"? },   // pill 投影，title 仍截断到 48
+  "tree": {                                            // 单任务时整个字段省略
+    "id", "title", "status", "priority"?, "current"?,  // 根 = 唯一的「父任务」
+    "children"?: [ { …同形状，可再嵌套… } ]             // 无子时省略该字段
+  }
+}
+```
+
+- `current: true` 只出现在会话当前任务那一行，其余行**省略该字段**（沿用仓库"可选字段省略"的约定）。
+- **树节点的 title 不截断**（完整标题），只有 `task.title` 保留 48 截断：pill 是头部单行、
+  受横向空间硬约束；下拉是详情视图，靠 CSS ellipsis + `title` 属性兜底。两条规则各自成立，写在注释里。
+- `tree` 省略的判据：**根就是当前任务且没有任何后代**（R6 的单任务）。
+- 树的**层级照实**（R9）：不做扁平化，深度由 `children` 递归表达。
+
+### 3.3 树推导算法（host 侧）
+
+输入：`<cwd>/.trellis/tasks` 下全部活动任务（跳过 `archive`，见 §2.2.1），每个读 `task.json`。
+
+1. **建节点集** `nodes: Map<dirName, {id,title,status,priority,parent,childNames}>`。
+   入集**不套扫描的 status/branch 过滤**——树要展示整棵树，包括 `completed` 或从未 start 的成员
+   （与 `task.py list` 的 `all_tasks` 一致）。`childNames` 取 `children` ∪ 旧拼写 `subtasks`
+   （`task_store.py:851` 说后者仍在老文件里被携带）。
+2. **求有效父** `effectiveParent(id)`，三级判定，专门为容错：
+   1. `node.parent` 指向活动节点 → 用它；
+   2. 否则若**恰有一个**活动节点的 `childNames` 列出了它 → 用它（Trellis 自己会打印
+      "Link is half-written" 的半写链接正落在这里：父已认子、子还没记父）；
+   3. 否则 → 无父（悬空 `parent` 引用 / 父已归档，与 `task.py list` 把孤儿渲染成顶层同义）。
+   因为父是**函数**（每个节点至多一个），整片就是森林——不会出现一个节点挂两处。
+3. **建反向索引**：`childrenIndex: parentId → [childId]`，由第 2 步的结果一次性生成，
+   同级按**目录名字典序**（`MM-DD-` 前缀即时间序）排序 → 迭代顺序完全确定、可断言。
+4. **定位根**：从当前任务沿 `effectiveParent` 上溯，visited 集合 + 迭代上限 64 防环；
+   遇到环则在停止点收手（不抛、不死循环）。
+5. **递归出参**：根节点带 `children` 递归转 wire，`current: true` 打在当前任务那一行。
+6. **单任务判定**：根 === 当前任务且无 `children` → 返回 `undefined`（R6）。
+7. 整个 `buildTree` 包在 try/catch 里：任何异常 → 当作无树（pill 退化成今天的行为，不抛）。
+
+**`children` 是历史列表**（`trellis-meta` task-reference 原话）：已归档的子任务名字仍留在里面。
+它们不在活动节点集里 → 自然被第 1 步挡掉，不出现在树里 —— 与 `task.py list` 的
+`if child_name in all_tasks` 行为一致。
+
+**为什么向下只走 `childrenIndex` 而不再并 `childNames`**：若某节点的 `childNames` 列了一个
+`parent` 字段指向别人的节点（数据自相矛盾），并集合会把它挂到两处、还要靠遍历顺序决定归属。
+只认 `effectiveParent` 则每节点唯一归属，结果与顺序无关。
+
+### 3.4 下拉交互与样式（R8/R9）
+
+DOM（`span` 为根，保持一行内联；菜单行由递归渲染展平成一维数组后带 `depth`）：
+
+```
+span.trellis-statusline[data-status][data-role][title]      position:relative; inline-flex
+ ├─ (button|span).trellis-statusline-pill                   圆角 + 略灰背景；有树时才是 button
+ │   ├─ span.trellis-statusline-parent      根标题 ›           仅子任务
+ │   ├─ span.trellis-statusline-priority    [P2]
+ │   ├─ span.trellis-statusline-title       标题
+ │   ├─ span.trellis-statusline-separator   ·
+ │   ├─ span.trellis-statusline-state       进行中
+ │   ├─ span.trellis-statusline-role        父任务 / 子任务     仅有树时
+ │   └─ span.trellis-statusline-chevron     ▾                 仅有树时，展开时旋转
+ └─ ul.trellis-statusline-menu                              仅展开时
+     └─ li.trellis-statusline-menurow[data-role][data-depth][data-current?]   ← 每行一个，按 depth 缩进
+```
+
+- **圆角 + 略灰**：`border-radius:8px`、`background:var(--dsw-alias-bg-layer-2)`（已核实的 token，
+  语义就是"次级嵌套表面"）。菜单用 `--dsw-alias-bg-overlay`（"Overlay and popover background"）。
+- **层级缩进**：`li[data-depth="n"]` 的 `padding-left` 随 n 递增（0 → 8px，每级 +14px），
+  子级再叠一条左导引线（`.trellis-statusline-menubranch`）。不用 `├└` 字符：字体无关、不会出现豆腐块
+  （字符方案考虑过并否掉）。
+- **只在有树时才是 `button`**：无树时渲染成 `span`，没有 `onClick`、没有焦点环、不进 Tab 序，
+  守住"不该长的控件不要长"。
+- **关闭路径三条**：再次点击、`document` 上的 `pointerdown` 落在根之外、`document` 上的 `keydown`
+  Escape。展开期间用一个 effect 注册这两个监听器并成对清理。
+- **切会话即收起**：`sessionId` 变化时 `setOpen(false)`。
+- **高亮当前任务**：`data-current="true"` → 品牌色文字 + `bg-layer-2` 底 + 左侧 2px 品牌色条。
+- 下拉定位 `position:absolute; top:calc(100% + 6px); left:0; z-index:100`，与官方同席位
+  jobs cell 的菜单同款做法（它就是 `.actions` 里的绝对定位下拉，证明头部不裁切）。
+
+### 3.5 边界情况（把"很多种情况"逐条钉住）
+
+| 情况 | 期望 |
+|---|---|
+| 当前任务无父无子 | 无 `tree`；pill 与旧版一致；不可点击（R6/AC7） |
+| 当前任务是根，有后代 | `tree` = 当前节点；角色 `root` |
+| 当前任务是子任务 | `tree` = 根；pill 前缀 = **根**标题；当前行 `current: true`；角色 `child` |
+| 当前任务是孙任务 | 同子任务（角色仍 `child`）；菜单里按真实深度缩进两级（R7 + R9） |
+| 后代里混有 `completed` / 从未 start 的兄弟 | 照常入树（不套 status/branch 过滤） |
+| 半写链接（只在父的 `children` 里） | `effectiveParent` 第 2 级兜住，仍认作父子 |
+| 悬空 `parent`（父已归档/被删） | 视为无父 → 当前成为根 |
+| `children` 里的历史名字（子已归档） | 不在活动集 → 不进树（与 `task.py list` 一致） |
+| 老文件只写 `subtasks` 没写 `children` | `childNames` 并集覆盖 |
+| 环（a.parent=b, b.parent=a） | visited + 上限 64 → 在停止点收手，不挂死 |
+| 当前任务自身 `task.json` 解析失败 | 走既有空态（`parseTask` 已返回 undefined） |
+| 树里某节点 `task.json` 解析失败 | 该节点及其子树不进树；不影响其它行 |
+| 会话没有 cwd / 无 `.trellis` | 走既有空态，无树 |
+
 ## 4. 兼容、风险与权衡
 
 | 项 | 影响 | 处置 |
@@ -167,7 +282,10 @@ id 用**任务目录名**（`09-15-trellis-statusline`）——它同时是 `cur
 | ~~`sessionId` 是否等于磁盘目录名~~ | — | **步骤 0 已证相等**（§2.1 结论 A），不再是风险 |
 | ~~host 会话服务是否存在/可用~~ | — | **步骤 0 已证可用**（§2.1 结论 B，两条同步路径），不再是风险 |
 | 非存活且未登记工作区的会话解不出 cwd | 该会话显示空态 | 接受：D1 第 4 步 → `none`；两条 host 路径已覆盖存活 + 持久化会话 |
-| `.trellis` 规模（任务多） | 每 10s 扫目录的开销 | 只读 `<cwd>/.trellis/tasks/*/task.json`（浅扫一层），先取指针；实测任务数 <100 无压力 |
+| `.trellis` 规模（任务多） | 每 10s 扫目录的开销 | 只读 `<cwd>/.trellis/tasks/*/task.json`（浅扫一层）；实测 5 个真实工作区最大 40 个任务无压力 |
+| 建树需读**全部**活动任务（D7，指针命中时也读） | 每 10s N 个小文件读，N 达数千时成为负担 | 已知上界：实测最大 40，可忽略；若日后某工作区上千任务，加一个 `NODE_LIMIT` 常量跳过建树即可（届时 pill 退化为不带树） |
+| 下拉被头部裁切 | 菜单被 `overflow:hidden` 剪掉 | 用与官方同席位 jobs cell 完全相同的绝对定位方案（它已验证可用）；`z-index:100` |
+| 树推导遇到环 / 半写链接 / 悬空父 | 挂死或归属错误 | visited + 迭代上限 64；`effectiveParent` 三级判定；§3.5 逐条有测试 |
 | 只读保证 | 误写会污染用户仓库 | host 只做 `fs.readFile`/`readdir`；不引入任何写路径；测试断言无写 API 调用 |
 
 ## 5. 运维与回滚
