@@ -21,8 +21,12 @@ the rest conversationally.
 
 ## Status (update the checkboxes as you complete each item)
 
-- [ ] Fill guidelines for dsh-plugin-ollama-usage
-- [ ] Add code examples
+- [x] Fill guidelines for dsh-plugin-ollama-usage
+- [x] Add code examples
+
+> Filled 2026-09-15, verified against `dsh-plugin-ollama-usage@eb8c782`. Six frozen contract files
+> under `.trellis/spec/dsh-plugin-ollama-usage/frontend/` — platform contracts and observed
+> failures only; v1 UI/state conventions are deliberately deferred (see its `index.md`).
 
 ---
 
