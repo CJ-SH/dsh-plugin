@@ -23,13 +23,20 @@ let dirty = false
 const storeOf = (component) => {
   let store = stores.get(component)
   if (store === undefined) {
-    store = { states: [], deps: [], pending: [], cleanups: [] }
+    store = { states: [], deps: [], pending: [], cleanups: [], refs: [] }
     stores.set(component, store)
   }
   return store
 }
 const reactStub = {
-  createElement: (type, props, ...children) => ({ type, props: props ?? {}, children: children.flat(Infinity) }),
+  createElement: (type, props, ...children) => {
+    const node = { type, props: props ?? {}, children: children.flat(Infinity) }
+    // React assigns a `ref` prop to its holder during commit; the cell relies on that to tell
+    // an inside click from an outside one.
+    const ref = node.props.ref
+    if (ref !== null && ref !== undefined && typeof ref === 'object') ref.current = node
+    return node
+  },
   useState: (initial) => {
     const store = storeOf(active)
     const index = cursor
@@ -42,6 +49,13 @@ const reactStub = {
       dirty = true
     }
     return [store.states[index], set]
+  },
+  useRef: (initial) => {
+    const store = storeOf(active)
+    const index = cursor
+    cursor += 1
+    if (!(index in store.refs)) store.refs[index] = { current: initial }
+    return store.refs[index]
   },
   useEffect: (effect, list) => {
     const store = storeOf(active)
@@ -66,10 +80,26 @@ const reactStub = {
 
 let factory = null
 globalThis.window = { __ModuleLoader__: { load: (entry) => { factory = entry.factory } } }
+
+// The cell registers its dismissal listeners on `document` while the menu is open, so the stub
+// has to own them: that is how a test can prove they are removed again.
+const documentListeners = new Map()
+const listenerCount = () => [...documentListeners.values()].reduce((total, set) => total + set.size, 0)
+const fireDocument = (type, event) => {
+  for (const handler of [...(documentListeners.get(type) ?? [])]) handler(event)
+}
 globalThis.document = {
   createElement: () => ({ dataset: {}, textContent: '', remove() {} }),
   head: { append: () => undefined },
   querySelector: () => null,
+  addEventListener(type, handler) {
+    const set = documentListeners.get(type) ?? new Set()
+    set.add(handler)
+    documentListeners.set(type, set)
+  },
+  removeEventListener(type, handler) {
+    documentListeners.get(type)?.delete(handler)
+  },
 }
 
 await import(clientUrl.href)
@@ -159,6 +189,24 @@ const findRoot = (node) => {
   if (node === null || typeof node !== 'object' || Array.isArray(node)) return null
   return node.props?.className === 'trellis-statusline' ? node : null
 }
+const findByClass = (node, className) => {
+  if (node === null || node === undefined || typeof node !== 'object') return null
+  if (Array.isArray(node)) {
+    for (const child of node) {
+      const found = findByClass(child, className)
+      if (found !== null) return found
+    }
+    return null
+  }
+  if (node.props?.className === className) return node
+  return findByClass(node.children ?? [], className)
+}
+/** The clickable pill, or the plain one — the difference is the element type. */
+const pillOf = (tree) => findByClass(tree, 'trellis-statusline-pill')
+const menuOf = (tree) => findByClass(tree, 'trellis-statusline-menu')
+const rowIds = (menu) => (menu?.children ?? []).map((row) => row.props.key)
+const rowDepths = (menu) => (menu?.children ?? []).map((row) => row.props['data-depth'])
+const currentRows = (menu) => (menu?.children ?? []).filter((row) => row.props['data-current'] === 'true').map((row) => row.props.key)
 
 // --- 1. A task is active ------------------------------------------------------------------
 const tree = await settle({ sessionId: SESSION })
@@ -233,6 +281,151 @@ check('unmount disposed the remaining interval', disposed, [10_000, 10_000])
 // --- 8. The cell survives a seat that does not project `t` --------------------------------
 const plain = await settle({ sessionId: SESSION })
 check('a missing translator still renders localized text', flatten(plain).endsWith('进行中'), true)
+
+// --- 9. A stand-alone task stays inert (R6/AC7) -------------------------------------------
+const lone = await settle({ sessionId: SESSION })
+check('a stand-alone task renders no role', findByClass(lone, 'trellis-statusline-role'), null)
+check('a stand-alone task renders no chevron', findByClass(lone, 'trellis-statusline-chevron'), null)
+check('a stand-alone pill is not a button', pillOf(lone)?.type, 'span')
+check('a stand-alone pill has no click handler', pillOf(lone)?.props?.onClick, undefined)
+check('a stand-alone task opens no menu', menuOf(lone), null)
+check('the root reports no role', findRoot(lone)?.props?.['data-role'], 'none')
+check('a stand-alone task starts no document listener', listenerCount(), 0)
+
+// --- 10. A task tree: roles, the root prefix and the dropdown -----------------------------
+// `intervals.at(-1)` is the poll owned by the *live* effect: an earlier one was disposed when
+// the session switched, and its closure ignores every later reply.
+const refresh = () => intervals.at(-1).callback()
+
+const ROOT = { id: '09-10-parent', title: 'Parent system', status: 'planning', priority: 'P1' }
+const SIBLING = { id: '09-11-alpha', title: 'Alpha child', status: 'completed', priority: 'P3' }
+const CHILD = { id: '09-12-beta', title: 'Beta child', status: 'in_progress', priority: 'P2' }
+const GRAND = { id: '09-13-grand', title: 'Grand child', status: 'planning', priority: 'P4' }
+
+/** The tree as the Host would send it, with `current` on whichever task the session is on. */
+const treeFor = (currentId, nodes) => {
+  const mark = (node) => {
+    const wire = { id: node.id, title: node.title, status: node.status, priority: node.priority }
+    if (node.id === currentId) wire.current = true
+    const children = (node.children ?? []).map(mark)
+    if (children.length > 0) wire.children = children
+    return wire
+  }
+  return mark(nodes)
+}
+const nestedTree = { ...ROOT, children: [SIBLING, { ...CHILD, children: [GRAND] }] }
+const readAs = (task, tree) => ({ ok: true, value: { status: 'ok', task, tree } })
+
+// 10a. The session's task is the tree's root: the one and only parent task.
+reply = readAs(ROOT, treeFor(ROOT.id, nestedTree))
+refresh()
+const asRoot = await settle({ sessionId: SESSION })
+check('the root gets the parent-task role', flatten(asRoot), '[P1] Parent system · 规划中 · 父任务')
+check('the root carries its role for styling', findRoot(asRoot)?.props?.['data-role'], 'root')
+check('a task with a tree is a button', pillOf(asRoot)?.type, 'button')
+check('the trigger advertises the popup', [
+  pillOf(asRoot)?.props?.['aria-haspopup'],
+  pillOf(asRoot)?.props?.['aria-expanded'],
+], ['true', 'false'])
+
+// 10b. A child: the prefix is the ROOT title, and the role is the second one.
+reply = readAs(CHILD, treeFor(CHILD.id, nestedTree))
+refresh()
+const asChild = await settle({ sessionId: SESSION })
+check('a child shows the root title then its own', flatten(asChild), 'Parent system › [P2] Beta child · 进行中 · 子任务')
+check(
+  'the prefix carries no priority bracket of its own',
+  findByClass(asChild, 'trellis-statusline-parent')?.children?.[0],
+  'Parent system › ',
+)
+
+// 10c. A grandchild is a subtask too, and its prefix is still the root — never the middle
+// layer, because the label vocabulary has no third level (R7/AC8).
+reply = readAs(GRAND, treeFor(GRAND.id, nestedTree))
+refresh()
+const asGrand = await settle({ sessionId: SESSION })
+check('a grandchild is labelled a subtask', flatten(asGrand), 'Parent system › [P4] Grand child · 规划中 · 子任务')
+check('its prefix is the root, not the middle layer', flatten(asGrand).startsWith('Parent system ›'), true)
+
+// --- 11. The dropdown --------------------------------------------------------------------
+const openMenu = async () => {
+  const settled = await settle({ sessionId: SESSION })
+  if (menuOf(settled) === null) pillOf(settled).props.onClick()
+  return settle({ sessionId: SESSION })
+}
+
+check('the menu is closed to begin with', menuOf(asGrand), null)
+pillOf(asGrand).props.onClick()
+const opened = await settle({ sessionId: SESSION })
+check('clicking opens the menu', menuOf(opened) !== null, true)
+check('the trigger now reports itself expanded', pillOf(opened)?.props?.['aria-expanded'], 'true')
+check('the menu lists every member of the tree, root first', rowIds(menuOf(opened)), [
+  ROOT.id,
+  SIBLING.id,
+  CHILD.id,
+  GRAND.id,
+])
+check('each row carries its real depth', rowDepths(menuOf(opened)), ['0', '1', '1', '2'])
+check('only the session task is highlighted', currentRows(menuOf(opened)), [GRAND.id])
+check('rows are indented by depth', menuOf(opened)?.children?.map((row) => row.props.style.marginLeft), [
+  '0px',
+  '14px',
+  '14px',
+  '28px',
+])
+check(
+  'menu rows show each task and its state',
+  flatten(menuOf(opened)),
+  '[P1] Parent system · 规划中[P3] Alpha child · 已完成[P2] Beta child · 进行中[P4] Grand child · 规划中',
+)
+check('opening registers the two dismissal listeners', listenerCount(), 2)
+
+pillOf(await openMenu()).props.onClick()
+check('clicking the trigger again closes it', menuOf(await settle({ sessionId: SESSION })), null)
+check('closing removes the dismissal listeners', listenerCount(), 0)
+
+await openMenu()
+fireDocument('keydown', { key: 'Escape' })
+check('Escape closes it', menuOf(await settle({ sessionId: SESSION })), null)
+
+const outside = await openMenu()
+const rootNode = findRoot(outside)
+rootNode.contains = (target) => target === rootNode
+fireDocument('pointerdown', { target: rootNode })
+check('a click inside the cell keeps it open', menuOf(await settle({ sessionId: SESSION })) !== null, true)
+fireDocument('pointerdown', { target: { tag: 'somewhere-else' } })
+check('a click outside closes it', menuOf(await settle({ sessionId: SESSION })), null)
+check('the outside click removed both listeners too', listenerCount(), 0)
+
+// --- 12. Switching session closes an open menu and keeps listeners balanced ---------------
+check('menu is open before the session switch', menuOf(await openMenu()) !== null, true)
+const switched = await settle({ sessionId: OTHER })
+check('switching session closes the menu', menuOf(switched), null)
+check('switching session leaves no listener behind', listenerCount(), 0)
+
+// --- 13. A tree the browser half cannot trust is dropped, not half-rendered ---------------
+reply = readAs({ ...TASK, id: 'not-in-the-tree' }, treeFor(ROOT.id, nestedTree))
+refresh()
+const orphaned = await settle({ sessionId: OTHER })
+check('a tree without the task itself degrades to a plain pill', [
+  flatten(orphaned),
+  findByClass(orphaned, 'trellis-statusline-role'),
+], ['[P1] Trellis statusline plugin for dsh web · 进行中', null])
+
+reply = { ok: true, value: { status: 'ok', task: TASK, tree: 'nonsense' } }
+refresh()
+check('a malformed tree is ignored', findByClass(await settle({ sessionId: OTHER }), 'trellis-statusline-role'), null)
+
+// --- 14. Unmount releases the listeners it still owns --------------------------------------
+reply = readAs(CHILD, treeFor(CHILD.id, nestedTree))
+refresh()
+const reopenLast = await settle({ sessionId: OTHER })
+pillOf(reopenLast).props.onClick()
+const stillOpen = await settle({ sessionId: OTHER })
+check('the last menu is open before unmounting', menuOf(stillOpen) !== null, true)
+check('and it holds document listeners', listenerCount(), 2)
+for (const cleanup of storeOf(Cell).cleanups) if (typeof cleanup === 'function') cleanup()
+check('unmount releases every document listener', listenerCount(), 0)
 
 const failed = results.filter((entry) => !entry.ok)
 for (const entry of results) {

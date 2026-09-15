@@ -10,7 +10,7 @@
  */
 import { mkdir, readFile, readdir, rm, stat, writeFile } from 'node:fs/promises'
 import { createHash } from 'node:crypto'
-import { dirname, join } from 'node:path'
+import { basename, dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 const hostUrl = new URL('../lib/index.js', import.meta.url)
@@ -203,6 +203,131 @@ check('a corrupt pointed-at task.json falls through to the scan', (await read(SE
   priority: 'P2',
 })
 
+// --- The task tree (design.md §3.3, R6-R9) -----------------------------------------------
+// Every case from the §3.5 table, driven through the real handler against real files.
+const wsTree = await makeWorkspace('tree')
+const writeNode = (dirName, fields = {}) =>
+  writeTask(wsTree, dirName, {
+    id: dirName,
+    name: dirName,
+    title: fields.title ?? dirName,
+    status: fields.status ?? 'in_progress',
+    priority: fields.priority ?? 'P2',
+    branch: fields.branch === undefined ? 'master' : fields.branch,
+    parent: fields.parent ?? null,
+    ...(fields.children === undefined ? {} : { children: fields.children }),
+    ...(fields.subtasks === undefined ? {} : { subtasks: fields.subtasks }),
+  })
+/** Point the session at one node and return the whole `value` the browser half would receive. */
+const atTask = async (dirName) => {
+  pointAt(wsTree)
+  await writePointer(wsTree, SESSION, `.trellis/tasks/${dirName}`)
+  return (await read(SESSION)).value
+}
+const treeAt = async (dirName) => (await atTask(dirName)).tree
+
+// A stand-alone task sends no tree at all (R6), so its reply is byte-identical to the old one.
+await writeNode('09-15-solo')
+check('a stand-alone task carries no tree', await atTask('09-15-solo'), {
+  status: 'ok',
+  task: { id: '09-15-solo', title: '09-15-solo', status: 'in_progress', priority: 'P2' },
+})
+
+await writeNode('09-10-root', { children: ['09-11-alpha', '09-12-beta'] })
+await writeNode('09-11-alpha', { parent: '09-10-root', status: 'completed', priority: 'P3' })
+await writeNode('09-12-beta', { parent: '09-10-root', children: ['09-13-grand'] })
+await writeNode('09-13-grand', { parent: '09-12-beta' })
+
+check('the tree is rooted at the session task when that is the root', await treeAt('09-10-root'), {
+  id: '09-10-root',
+  title: '09-10-root',
+  status: 'in_progress',
+  priority: 'P2',
+  current: true,
+  children: [
+    // A `completed` sibling is a member of the structure, so it appears — the scan's status
+    // and branch filters deliberately do not apply here.
+    { id: '09-11-alpha', title: '09-11-alpha', status: 'completed', priority: 'P3' },
+    {
+      id: '09-12-beta',
+      title: '09-12-beta',
+      status: 'in_progress',
+      priority: 'P2',
+      children: [{ id: '09-13-grand', title: '09-13-grand', status: 'in_progress', priority: 'P2' }],
+    },
+  ],
+})
+
+await writeNode('09-16-nopriority', { parent: '09-10-root', priority: '' })
+check(
+  'a tree node with no priority omits the field, like the pill does',
+  (await treeAt('09-10-root')).children.map((child) => 'priority' in child),
+  [true, true, false],
+)
+
+const grandTree = await treeAt('09-13-grand')
+check('a grandchild keeps the real nesting', [grandTree.id, grandTree.children.length], ['09-10-root', 3])
+check('only the session task is marked current', [
+  grandTree.current,
+  grandTree.children[1].children[0].current,
+], [undefined, true])
+
+// Trellis' own link can be left half-written: the parent lists the child, the child never
+// records the parent (it prints "Link is half-written" when that second write fails).
+await writeNode('09-20-parent', { children: ['09-21-half'] })
+await writeNode('09-21-half')
+check('a half-written link still attaches the child', (await treeAt('09-21-half')).id, '09-20-parent')
+
+// Older task.json files carry the legacy `subtasks` spelling instead of `children`.
+await writeNode('09-30-legacy', { subtasks: ['09-31-old'] })
+await writeNode('09-31-old')
+check('the legacy subtasks spelling still attaches', (await treeAt('09-31-old')).id, '09-30-legacy')
+
+// A parent that is gone (archived, renamed) makes its child a root, as `task.py list` does.
+await writeNode('09-40-orphan', { parent: '09-99-missing', children: ['09-41-kid'] })
+await writeNode('09-41-kid', { parent: '09-40-orphan' })
+check('a dangling parent makes the task its own root', (await treeAt('09-40-orphan')).id, '09-40-orphan')
+
+// `children` is a historical list: archived children keep their name in it forever.
+await writeNode('09-50-parent', { children: ['09-51-here', '09-52-archived'] })
+await writeNode('09-51-here', { parent: '09-50-parent' })
+check('an archived child name stays out of the tree', (await treeAt('09-50-parent')).children.map((n) => n.id), [
+  '09-51-here',
+])
+
+// A never-started member is invisible to the scan but is still part of the structure.
+await writeNode('09-90-parent', { children: ['09-91-never'] })
+await writeNode('09-91-never', { parent: '09-90-parent', branch: null })
+check('a never-started member still appears in the tree', (await treeAt('09-90-parent')).children.map((n) => n.id), [
+  '09-91-never',
+])
+
+// A corrupt node drops out of the tree without taking its siblings with it.
+await writeNode('09-80-parent', { children: ['09-81-broken', '09-82-ok'] })
+await writeNode('09-82-ok', { parent: '09-80-parent' })
+await writeTask(wsTree, '09-81-broken', { not: 'a task' })
+check('an unreadable node is skipped, not fatal', (await treeAt('09-80-parent')).children.map((n) => n.id), [
+  '09-82-ok',
+])
+
+// A parent cycle must terminate rather than hang the handler.
+await writeNode('09-60-a', { parent: '09-61-b' })
+await writeNode('09-61-b', { parent: '09-60-a' })
+const cyclic = await treeAt('09-60-a')
+check('a parent cycle terminates and still renders', [cyclic.id, cyclic.children.map((n) => n.id)], [
+  '09-61-b',
+  ['09-60-a'],
+])
+
+// The pill truncates at 48 because the header is one line; a dropdown row has room, and
+// hiding the rest of a long title there would defeat the point of opening it.
+await writeNode('09-70-long', { title: 'y'.repeat(80), parent: '09-71-parent' })
+await writeNode('09-71-parent', { children: ['09-70-long'] })
+check('tree titles are not truncated the way the pill title is', [
+  (await treeAt('09-70-long')).children[0].title.length,
+  (await atTask('09-70-long')).task.title.length,
+], [80, 48])
+
 // --- Empty states -----------------------------------------------------------------------
 const wsEmpty = await makeWorkspace('empty')
 pointAt(wsEmpty)
@@ -298,18 +423,24 @@ async function snapshot(root) {
   await walk(root)
   return rows
 }
-pointAt(wsScan)
-const before = await snapshot(join(wsScan, '.trellis'))
-for (const sessionId of [SESSION, OTHER_SESSION, '']) await read(sessionId)
-const after = await snapshot(join(wsScan, '.trellis'))
-check('reading a workspace leaves its .trellis byte-identical', after, before)
+// Both a plain scan workspace and a tree workspace: building a tree reads every task.json, so
+// it is the wider read path and deserves its own proof that reading never writes.
+for (const root of [wsScan, wsTree]) {
+  pointAt(root)
+  const before = await snapshot(join(root, '.trellis'))
+  for (const sessionId of [SESSION, OTHER_SESSION, '']) await read(sessionId)
+  const after = await snapshot(join(root, '.trellis'))
+  check(`reading ${basename(root)} leaves its .trellis byte-identical`, after, before)
+}
 
 const hostSource = await readFile(hostUrl, 'utf8')
 check('host half imports nothing from the harness', /from\s+['"]@deepseek-ai\//.test(hostSource), false)
 check('host half imports only node: builtins and relative paths', [...hostSource.matchAll(/from\s+'([^']+)'/g)].map((match) => match[1]).sort(), ['node:fs/promises', 'node:path'])
 check(
   'host half contains no write API',
-  /writeFile|appendFile|rename\(|unlink|rmdir|\bmkdir\b|\brm\(|createWriteStream|truncate/.test(hostSource),
+  // `\btruncate\b` rather than a bare `truncate`: the plain word also appears in prose
+  // ("a long title is truncated"), and this assertion is about API calls, not vocabulary.
+  /writeFile|appendFile|rename\(|unlink|rmdir|\bmkdir\b|\brm\(|createWriteStream|\btruncate\b/.test(hostSource),
   false,
 )
 

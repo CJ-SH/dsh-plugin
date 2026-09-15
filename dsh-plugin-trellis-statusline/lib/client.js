@@ -56,6 +56,13 @@ window.__ModuleLoader__.load({
     }
     const STATE_UNKNOWN = 'state.unknown'
 
+    /**
+     * The only two roles there are (R7): the tree's top ancestor is the one and only parent
+     * task, and every other member — grandchildren included — is a subtask. There is no third
+     * label to pick, which is what makes the header readable on an arbitrarily deep tree.
+     */
+    const ROLE_KEYS = { root: 'role.root', child: 'role.child' }
+
     /** Simplified Chinese dictionary (the key-set source of truth). */
     const zh = {
       'state.in_progress': '进行中',
@@ -63,6 +70,9 @@ window.__ModuleLoader__.load({
       'state.review': '审核中',
       'state.completed': '已完成',
       'state.unknown': '未知状态',
+      'role.root': '父任务',
+      'role.child': '子任务',
+      'menu.aria': 'Trellis 任务树',
     }
     /** English dictionary, key-identical to the Chinese source of truth. */
     const en = {
@@ -71,21 +81,51 @@ window.__ModuleLoader__.load({
       'state.review': 'in review',
       'state.completed': 'completed',
       'state.unknown': 'unknown state',
+      'role.root': 'parent task',
+      'role.child': 'subtask',
+      'menu.aria': 'Trellis task tree',
     }
 
-    /** Theme tokens only, so the pill follows light/dark without its own palettes. */
+    /**
+     * Theme tokens only, so the pill follows light/dark without its own palettes.
+     *
+     * The chevron is drawn with two borders rather than a `▾` character: same reasoning as the
+     * tree indent, which uses nesting margins instead of `├`/`└` — a glyph depends on the font
+     * the user happens to run.
+     */
     const CSS = [
-      '.trellis-statusline{box-sizing:border-box;min-width:0;max-width:100%;color:var(--dsw-alias-label-secondary);align-items:center;gap:4px;padding:3px 2px;font-size:12px;line-height:18px;white-space:nowrap;display:inline-flex}',
+      '.trellis-statusline{box-sizing:border-box;min-width:0;max-width:100%;align-items:center;display:inline-flex;position:relative;font-size:12px;line-height:18px}',
+      '.trellis-statusline-pill{box-sizing:border-box;min-width:0;max-width:100%;color:var(--dsw-alias-label-secondary);background:var(--dsw-alias-bg-layer-2);border:0;border-radius:8px;align-items:center;gap:4px;padding:2px 8px;font:inherit;white-space:nowrap;display:inline-flex}',
+      'button.trellis-statusline-pill{cursor:pointer}',
+      'button.trellis-statusline-pill:hover{background:var(--dsw-alias-bg-layer-1);color:var(--dsw-alias-label-primary)}',
+      'button.trellis-statusline-pill:focus-visible{outline:2px solid var(--dsw-alias-brand-primary);outline-offset:1px}',
+      '.trellis-statusline-parent{min-width:0;overflow:hidden;text-overflow:ellipsis;opacity:.75}',
       '.trellis-statusline-priority{flex:none;color:var(--dsw-alias-brand-primary);font-weight:500;font-variant-numeric:tabular-nums}',
       '.trellis-statusline-title{min-width:0;overflow:hidden;text-overflow:ellipsis}',
       '.trellis-statusline-separator{flex:none;opacity:.6}',
       '.trellis-statusline-state{flex:none}',
       '.trellis-statusline[data-status="in_progress"] .trellis-statusline-state{color:var(--dsw-alias-state-success-primary)}',
       '.trellis-statusline[data-status="planning"] .trellis-statusline-state{color:var(--dsw-alias-state-warn-primary)}',
+      '.trellis-statusline-role{flex:none;border-radius:4px;background:var(--dsw-alias-bg-layer-1);color:var(--dsw-alias-label-secondary);padding:0 4px;font-size:11px;line-height:16px}',
+      '.trellis-statusline-role[data-role="root"]{color:var(--dsw-alias-brand-primary)}',
+      '.trellis-statusline-chevron{flex:none;width:5px;height:5px;margin-left:2px;border-right:1.5px solid currentColor;border-bottom:1.5px solid currentColor;transform:rotate(45deg) translate(-1px,-1px)}',
+      '.trellis-statusline-chevron[data-open="true"]{transform:rotate(-135deg) translate(-1px,-1px)}',
+      '.trellis-statusline-menu{position:absolute;top:calc(100% + 6px);left:0;z-index:100;box-sizing:border-box;min-width:240px;max-width:min(460px,80vw);max-height:min(60vh,420px);overflow:auto;margin:0;padding:4px;list-style:none;background:var(--dsw-alias-bg-overlay);border:.5px solid var(--dsw-alias-border-l1);border-radius:12px;box-shadow:var(--dsw-elevation-prominent,0 8px 24px rgb(0 0 0 / 18%));color:var(--dsw-alias-label-primary)}',
+      '.trellis-statusline-menurow{box-sizing:border-box;align-items:center;gap:6px;padding:3px 8px;border-radius:6px;white-space:nowrap;overflow:hidden;display:flex}',
+      '.trellis-statusline-menurow:not([data-depth="0"]){border-left:1px solid var(--dsw-alias-border-l1)}',
+      '.trellis-statusline-menurow[data-current="true"]{background:var(--dsw-alias-bg-layer-2);color:var(--dsw-alias-brand-primary)}',
+      '.trellis-statusline-menurow[data-current="true"] .trellis-statusline-menustate{color:var(--dsw-alias-brand-primary)}',
+      '.trellis-statusline-menupriority{flex:none;font-variant-numeric:tabular-nums;opacity:.9}',
+      '.trellis-statusline-menutitle{min-width:0;overflow:hidden;text-overflow:ellipsis}',
+      '.trellis-statusline-menustate{flex:none;color:var(--dsw-alias-label-secondary)}',
     ].join('\n')
 
     const isRecord = (value) => typeof value === 'object' && value !== null && !Array.isArray(value)
     const readText = (value) => (typeof value === 'string' ? value.trim() : '')
+
+    /** Depth ceiling for decoding a tree: the Host sends a shallow one, and a malformed reply
+     * must not be able to recurse the browser half off the stack. */
+    const NODE_MAX_DEPTH = 8
 
     function errorMessage(error) {
       if (error === null || error === undefined) return 'unknown error'
@@ -111,13 +151,67 @@ window.__ModuleLoader__.load({
      * Re-narrow the Host half's reply rather than trusting it. Anything that is not exactly
      * `{ status: 'ok', task: { title, status, ... } }` means "nothing to show" — the same
      * `null` this seat renders for a session without a task.
+     *
+     * `tree` is optional and decoded defensively: a tree the browser half cannot trust is
+     * dropped rather than partially rendered, which degrades to the plain pill.
      */
     function decodeTask(value) {
       if (!isRecord(value) || value.status !== 'ok' || !isRecord(value.task)) return null
+      const id = readText(value.task.id)
       const title = readText(value.task.title)
       const status = readText(value.task.status)
       if (title.length === 0 || status.length === 0) return null
-      return { title, status, priority: readText(value.task.priority) }
+
+      const task = { id, title, status, priority: readText(value.task.priority), tree: null }
+      const tree = decodeNode(value.tree, 0)
+      // A tree that does not contain the task it claims to describe is unusable: both the role
+      // chip and the highlight are keyed off that id.
+      if (tree !== null && id.length > 0 && containsId(tree, id)) task.tree = tree
+      return task
+    }
+
+    /**
+     * One tree node. The shape is the Host's `{ id, title, status, priority?, current?,
+     * children? }`; anything unrecognised inside it is skipped instead of being trusted.
+     */
+    function decodeNode(value, depth) {
+      if (!isRecord(value) || depth > NODE_MAX_DEPTH) return null
+      const id = readText(value.id)
+      const title = readText(value.title)
+      const status = readText(value.status)
+      if (id.length === 0 || title.length === 0 || status.length === 0) return null
+
+      const node = {
+        id,
+        title,
+        status,
+        priority: readText(value.priority),
+        current: value.current === true,
+        children: [],
+      }
+      if (Array.isArray(value.children)) {
+        for (const child of value.children) {
+          const decoded = decodeNode(child, depth + 1)
+          if (decoded !== null) node.children.push(decoded)
+        }
+      }
+      return node
+    }
+
+    /** Whether `id` names a node anywhere in the decoded tree. */
+    function containsId(node, id) {
+      if (node.id === id) return true
+      return node.children.some((child) => containsId(child, id))
+    }
+
+    /**
+     * Depth-first rows for the dropdown, each carrying its own indent level. Kept as data (not
+     * nested markup) so the menu stays a flat list the owner can scroll.
+     */
+    function flattenRows(node, depth, rows) {
+      rows.push({ node, depth })
+      for (const child of node.children) flattenRows(child, depth + 1, rows)
+      return rows
     }
 
     function makeApply(ctx) {
@@ -167,6 +261,8 @@ window.__ModuleLoader__.load({
        */
       function StatuslineCell({ sessionId, t }) {
         const [task, setTask] = React.useState(null)
+        const [open, setOpen] = React.useState(false)
+        const rootRef = React.useRef(null)
         const say = typeof t === 'function' ? t : (key) => copy[key] ?? key
 
         React.useEffect(() => {
@@ -191,18 +287,116 @@ window.__ModuleLoader__.load({
           }
         }, [sessionId])
 
+        // Another session's tree has nothing to do with an open menu.
+        React.useEffect(() => {
+          setOpen(false)
+        }, [sessionId])
+
+        // While the menu is open, both dismissal routes live on `document` so they work no
+        // matter where focus went. One effect owns both listeners so they can only be removed
+        // together — and only while this cell is mounted.
+        React.useEffect(() => {
+          if (!open) return undefined
+          const onPointerDown = (event) => {
+            const root = rootRef.current
+            const inside = root !== null && typeof root.contains === 'function' && root.contains(event.target)
+            if (!inside) setOpen(false)
+          }
+          const onKeyDown = (event) => {
+            if (event.key === 'Escape') setOpen(false)
+          }
+          document.addEventListener('pointerdown', onPointerDown)
+          document.addEventListener('keydown', onKeyDown)
+          return () => {
+            document.removeEventListener('pointerdown', onPointerDown)
+            document.removeEventListener('keydown', onKeyDown)
+          }
+        }, [open])
+
         if (task === null) return null
 
+        const tree = task.tree
+        // Only two roles exist (R7): the root ancestor is the one and only parent task, and
+        // every other member of the tree — grandchildren included — is a subtask.
+        const role = tree === null ? null : tree.id === task.id ? 'root' : 'child'
         const state = say(STATE_KEYS[task.status] ?? STATE_UNKNOWN)
         const bracket = task.priority.length === 0 ? null : `[${task.priority}]`
+
+        const parts = []
+        if (role === 'child') {
+          // The root's title, not the immediate parent's: the label vocabulary has no third
+          // level, so `›` always points at the one parent task of the whole tree.
+          parts.push(h('span', { className: 'trellis-statusline-parent', key: 'parent' }, `${tree.title} › `))
+        }
+        if (bracket !== null) parts.push(h('span', { className: 'trellis-statusline-priority', key: 'priority' }, bracket), ' ')
+        parts.push(h('span', { className: 'trellis-statusline-title', key: 'title' }, task.title))
+        parts.push(h('span', { className: 'trellis-statusline-separator', key: 'separator' }, ' · '))
+        parts.push(h('span', { className: 'trellis-statusline-state', key: 'state' }, state))
+        if (role !== null) {
+          parts.push(h('span', { className: 'trellis-statusline-separator', key: 'role-separator' }, ' · '))
+          parts.push(h('span', { className: 'trellis-statusline-role', key: 'role', 'data-role': role }, say(ROLE_KEYS[role])))
+          parts.push(h('span', { className: 'trellis-statusline-chevron', key: 'chevron', 'data-open': open ? 'true' : 'false' }))
+        }
+
+        // A stand-alone task gets a plain `span`: no click target, no focus ring, no tab stop.
+        const pillProps = { className: 'trellis-statusline-pill' }
+        if (tree !== null) {
+          pillProps.type = 'button'
+          pillProps['aria-haspopup'] = 'true'
+          pillProps['aria-expanded'] = open ? 'true' : 'false'
+          pillProps.onClick = () => setOpen((current) => !current)
+        }
+        const pill = h(tree === null ? 'span' : 'button', pillProps, ...parts)
+
+        let menu = null
+        if (open && tree !== null) {
+          const rows = flattenRows(tree, 0, []).map(({ node, depth }) => {
+            const rowParts = []
+            if (node.priority.length > 0) {
+              rowParts.push(
+                h('span', { className: 'trellis-statusline-menupriority', key: 'priority' }, `[${node.priority}]`),
+                ' ',
+              )
+            }
+            rowParts.push(
+              h('span', { className: 'trellis-statusline-menutitle', key: 'title' }, node.title),
+              h('span', { className: 'trellis-statusline-separator', key: 'separator' }, ' · '),
+              h(
+                'span',
+                { className: 'trellis-statusline-menustate', key: 'state' },
+                say(STATE_KEYS[node.status] ?? STATE_UNKNOWN),
+              ),
+            )
+            return h(
+              'li',
+              {
+                className: 'trellis-statusline-menurow',
+                key: node.id,
+                'data-depth': String(depth),
+                'data-role': depth === 0 ? 'root' : 'child',
+                'data-current': node.id === task.id ? 'true' : 'false',
+                // Nested guide lines need the row's own edge to move inward, which padding
+                // does not do — hence margin, with the CSS border sitting on that edge.
+                style: { marginLeft: `${depth * 14}px` },
+                title: node.title,
+              },
+              ...rowParts,
+            )
+          })
+          menu = h('ul', { className: 'trellis-statusline-menu', key: 'menu', 'aria-label': say('menu.aria') }, rows)
+        }
+
         return h(
           'span',
-          { className: 'trellis-statusline', 'data-status': task.status, title: task.title },
-          bracket === null ? null : h('span', { className: 'trellis-statusline-priority', key: 'priority' }, bracket),
-          bracket === null ? null : ' ',
-          h('span', { className: 'trellis-statusline-title', key: 'title' }, task.title),
-          h('span', { className: 'trellis-statusline-separator', key: 'separator' }, ' · '),
-          h('span', { className: 'trellis-statusline-state', key: 'state' }, state),
+          {
+            className: 'trellis-statusline',
+            'data-status': task.status,
+            'data-role': role ?? 'none',
+            title: task.title,
+            ref: rootRef,
+          },
+          pill,
+          menu,
         )
       }
 

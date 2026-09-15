@@ -99,11 +99,15 @@ async function readJson(path) {
   }
 }
 
-/** Directory names under `path`, or none when it is missing or unreadable. */
+/** Directory names under `path`, or none when it is missing or unreadable. Sorted, so every
+ * traversal built on it is deterministic. */
 async function listDirectories(path) {
   try {
     const entries = await readdir(path, { withFileTypes: true })
-    return entries.filter((entry) => entry.isDirectory()).map((entry) => entry.name)
+    return entries
+      .filter((entry) => entry.isDirectory())
+      .map((entry) => entry.name)
+      .sort()
   } catch {
     return []
   }
@@ -237,9 +241,170 @@ async function scanTasks(cwd) {
 }
 
 /**
+ * A link-chain ceiling. A hand-edited or corrupted `parent` chain could otherwise make the
+ * upward walk spin forever; reaching the ceiling simply stops the walk where it is.
+ */
+const NODE_LINK_MAX_HOPS = 64
+
+/**
+ * Every active task under `<cwd>/.trellis/tasks`, keyed by directory name.
+ *
+ * The tree deliberately ignores the scan's status and branch filters (design.md §2.2.1): a tree
+ * that hid its `completed` or never-started members would misrepresent the structure it exists
+ * to show, and `task.py list` walks the same unfiltered set.
+ *
+ * `childNames` is `children` plus its legacy spelling `subtasks` — `task_store.py` rewrites both
+ * because older `task.json` files still carry the latter.
+ */
+async function readActiveNodes(cwd) {
+  const tasksRoot = join(cwd, WORKFLOW_DIR, TASKS_DIR)
+  const nodes = new Map()
+  for (const dirName of await listDirectories(tasksRoot)) {
+    if (dirName === ARCHIVE_DIR) continue
+    const source = await readJson(join(tasksRoot, dirName, 'task.json'))
+    if (!isRecord(source)) continue
+    const status = text(source.status)
+    if (status.length === 0) continue
+
+    const childNames = []
+    for (const field of [source.children, source.subtasks]) {
+      if (!Array.isArray(field)) continue
+      for (const name of field) {
+        const childId = text(name)
+        if (childId.length > 0 && childId !== dirName) childNames.push(childId)
+      }
+    }
+
+    nodes.set(dirName, {
+      id: dirName,
+      title: text(source.title) || dirName,
+      status,
+      priority: text(source.priority),
+      parent: text(source.parent),
+      childNames,
+    })
+  }
+  return nodes
+}
+
+/**
+ * The parent each node actually hangs from, as a `Map<id, parentId>` — `''` for a root.
+ *
+ * Three levels of judgement, because Trellis' own bidirectional link can be left half-written:
+ * it warns `Link is half-written: <parent> now lists '<child>' as a child, but the new task does
+ * not record its parent` when the second write fails. Preferring the node's own `parent` field
+ * and falling back to the single active task that claims it as a child keeps such a task inside
+ * its tree instead of orphaning it. A dangling `parent` (its target archived or renamed) means
+ * "no parent", which is how `task.py list` renders orphans too.
+ *
+ * The result is a function — one parent per node at most — so the graph is a forest and no
+ * outcome can depend on traversal order.
+ */
+function linkParents(nodes) {
+  const claimants = new Map()
+  for (const node of nodes.values()) {
+    for (const childId of node.childNames) {
+      if (!nodes.has(childId)) continue
+      const owners = claimants.get(childId) ?? []
+      owners.push(node.id)
+      claimants.set(childId, owners)
+    }
+  }
+
+  const parents = new Map()
+  for (const node of nodes.values()) {
+    if (node.parent.length > 0 && node.parent !== node.id && nodes.has(node.parent)) {
+      parents.set(node.id, node.parent)
+      continue
+    }
+    const owners = claimants.get(node.id) ?? []
+    parents.set(node.id, owners.length === 1 ? owners[0] : '')
+  }
+  return parents
+}
+
+/** Walk up to the top ancestor, stopping at a root, a cycle, or the hop ceiling. */
+function rootOf(id, parents) {
+  let current = id
+  const seen = new Set([id])
+  for (let hop = 0; hop < NODE_LINK_MAX_HOPS; hop += 1) {
+    const parent = parents.get(current) ?? ''
+    if (parent.length === 0 || seen.has(parent)) return current
+    seen.add(parent)
+    current = parent
+  }
+  return current
+}
+
+/** `Map<parentId, [childId]>` from {@link linkParents}; siblings in directory-name order, which
+ * for the `MM-DD-` prefix is chronological. */
+function indexChildren(parents) {
+  const index = new Map()
+  for (const [id, parent] of parents) {
+    if (parent.length === 0) continue
+    const siblings = index.get(parent) ?? []
+    siblings.push(id)
+    index.set(parent, siblings)
+  }
+  for (const siblings of index.values()) siblings.sort()
+  return index
+}
+
+/**
+ * One wire node, recursively.
+ *
+ * `title` is deliberately **not** truncated the way the pill's is. The pill is a single line in
+ * the header and has to stay short; a dropdown row has room and relies on CSS ellipsis, and
+ * cutting it at 48 characters would hide exactly the part that tells two similar titles apart —
+ * in the one place the user opened to tell them apart.
+ */
+function toTreeNode(id, currentId, nodes, index, seen) {
+  const node = nodes.get(id)
+  const wire = { id: node.id, title: node.title, status: node.status }
+  if (node.priority.length > 0) wire.priority = node.priority
+  if (node.id === currentId) wire.current = true
+
+  const children = []
+  for (const childId of index.get(node.id) ?? []) {
+    if (seen.has(childId)) continue
+    seen.add(childId)
+    children.push(toTreeNode(childId, currentId, nodes, index, seen))
+  }
+  if (children.length > 0) wire.children = children
+  return wire
+}
+
+/**
+ * The active task tree `currentId` belongs to, or `undefined` when it stands alone.
+ *
+ * Standing alone means it is the root **and** has no descendants — a task with a parent, or one
+ * with children, is a structure worth showing. Every other outcome (an unreadable directory, a
+ * corrupt node, a circular link) also degrades to `undefined`, which just means "the pill, with
+ * no tree and nothing to click".
+ */
+async function buildTree(cwd, currentId) {
+  try {
+    const nodes = await readActiveNodes(cwd)
+    if (!nodes.has(currentId)) return undefined
+
+    const parents = linkParents(nodes)
+    const index = indexChildren(parents)
+    const rootId = rootOf(currentId, parents)
+    if (rootId === currentId && (index.get(currentId) ?? []).length === 0) return undefined
+
+    return toTreeNode(rootId, currentId, nodes, index, new Set([rootId]))
+  } catch {
+    return undefined
+  }
+}
+
+/**
  * @returns `{ status: 'ok', task }`, or `{ status: 'none' }` for every other outcome — no
  *   session, no cwd, no `.trellis`, no running task, a corrupt file. The surface has nothing
  *   useful to say about any of them, and the browser half renders nothing for `none`.
+ *
+ *   `tree` is present only when the task belongs to a parent/child structure (design.md §3.2);
+ *   a task that stands alone gets exactly the reply it got before the feature existed.
  */
 async function readTask(ctx, input) {
   const sessionId = text(input.sessionId)
@@ -249,12 +414,14 @@ async function readTask(ctx, input) {
   if (cwd.length === 0) return { status: 'none' }
 
   const task = (await readPointedTask(cwd, sessionId)) ?? (await scanTasks(cwd))
-  return task === undefined ? { status: 'none' } : { status: 'ok', task }
+  if (task === undefined) return { status: 'none' }
+
+  const tree = await buildTree(cwd, task.id)
+  return tree === undefined ? { status: 'ok', task } : { status: 'ok', task, tree }
 }
 
 const ok = (value) => ({ ok: true, value })
 const fail = (code, message) => ({ ok: false, error: { code, message } })
-
 /**
  * One request from this plugin's browser half. The envelope is the connection service's:
  * `{ ok: true, value }` or `{ ok: false, error: { code, message } }`.

@@ -20,7 +20,7 @@
   },
   "license": "MIT",
   "scripts": {
-    "test": "node test/host.test.mjs && node test/client.test.mjs && node test/cell.test.mjs"
+    "test": "node test/host.test.mjs && node test/client.test.mjs && node test/cell.test.mjs && node test/integration.test.mjs"
   },
   "dsh": {
     "bundle": {

@@ -5,6 +5,7 @@ header.
 
 ```
 [P2] Trellis statusline plugin for dsh web · 进行中
+[P1] Release 0.2 › [P2] Wire the importer · 进行中 · 子任务
 ```
 
 ---
@@ -42,12 +43,46 @@ conversation must not grow a control for a capability it is not using.
 The display refreshes every 10 s, and immediately when the header switches to another
 session, so a `task.py start` or `task.py archive` shows up within one poll.
 
+## Task trees
+
+When the task belongs to a parent/child structure, the pill says so and becomes clickable.
+
+| The session's task is | The pill reads |
+|---|---|
+| standing alone | `[P2] Title · 进行中` — no role, no click target, no tab stop |
+| the tree's root | `[P1] Title · 进行中 · 父任务` |
+| anywhere else in the tree | `Root title › [P2] Title · 进行中 · 子任务` |
+
+Three rules keep this readable on a tree of any shape:
+
+- **There are only two roles.** The tree's *top ancestor* is the one and only 父任务; every other
+  member — grandchildren included — is a 子任务. No third label exists, so depth never changes the
+  wording, and `›` always leads to the root's title rather than to some middle layer.
+- **The priority bracket always belongs to the session's own task.** The `Root title ›` prefix
+  carries none, so there is never a question of which bracket means what.
+- **Clicking opens the real structure.** The dropdown keeps the true nesting — one indent level
+  per depth, with a guide line — and highlights the session's task.
+
+The tree is derived from the active task set, and the awkward cases are all pinned by tests:
+
+| Case | What happens |
+|---|---|
+| a `completed`, or never-started, sibling | shows in the tree; the scan's status/branch filters deliberately do not apply to structure |
+| a half-written link (parent lists the child, child records no parent) | still attached — Trellis prints `Link is half-written` when that second write fails |
+| a dangling `parent` (target archived or renamed) | the task becomes its own root, as `task.py list` renders orphans |
+| archived children still named in `children` | left out; `children` is a historical list, and `task.py list` skips them too |
+| the legacy `subtasks` spelling | still read |
+| a parent cycle | terminates at a hop ceiling instead of hanging |
+| a corrupt node | drops out with its subtree; its siblings still render |
+| a tree not containing the task it describes | dropped, degrading to the plain pill |
+
 ## What it does not do
 
 - **It never writes.** The Host half imports `node:fs/promises` for `readFile` and `readdir`
   and holds no write path — Trellis data cannot be modified by this plugin, and the self-check
   asserts it, including a before/after hash comparison of a workspace's `.trellis/`.
-- It does not start, switch or archive tasks; that stays `task.py`'s job.
+- It does not start, switch or archive tasks; that stays `task.py`'s job. The dropdown is a view,
+  not a control — its rows are not clickable.
 - It only *scans* for `in_progress` and `planning` tasks, so a task sitting in `review` is not
   proposed by the workspace scan — widen `RUNNING_STATUSES` in `lib/index.js` if that state should
   count. The session pointer is authoritative and unfiltered, so a pointed-at `review` task does
@@ -80,14 +115,27 @@ The plugin stores nothing and has nothing to configure, so uninstalling needs no
 
 ```bash
 node --check lib/index.js && node --check lib/client.js   # both halves parse
-npm test                                                  # 102 assertions, three harnesses
+npm test                                                  # 167 assertions, four harnesses
 ```
 
 | Harness | Covers |
 |---|---|
-| `test/host.test.mjs` | the four-step resolution against throwaway workspaces — pointer first (and unfiltered), scan fallback, rank and tie-break, "never started ⇒ not a candidate" with an A/B on the single `branch` field, `tasks/archive` skipped, every empty state, the `unknown-endpoint` error, "no write API in the source", and a before/after hash comparison proving a read leaves `.trellis/` byte-identical |
-| `test/client.test.mjs` | bundle id = package name, only `react` required, the seat (slot key vs cell id vs order), the locale namespace handed to the seat, stylesheet lifecycle, a refused locale namespace degrading to the local dictionaries, cross-half channel/endpoint agreement |
-| `test/cell.test.mjs` | the real cell under a minimal hook runtime — `[P1] title · state`, `null` for every failure mode, an unlisted status falling back to a generic word, `review` getting its own, the 10 s poll, and interval disposal on both session switch and unmount |
+| `test/host.test.mjs` | the four-step resolution against throwaway workspaces — pointer first (and unfiltered), scan fallback, rank and tie-break, "never started ⇒ not a candidate" with an A/B on the single `branch` field, `tasks/archive` skipped — plus **every row of the tree table above**, an exact-shape assertion on the tree payload, and a before/after hash comparison (on both a plain and a tree workspace) proving a read leaves `.trellis/` byte-identical |
+| `test/client.test.mjs` | bundle id = package name, only `react` required, the seat (slot key vs cell id vs order), the locale namespace handed to the seat, stylesheet lifecycle and its rounded/tinted/dropdown rules, a refused locale namespace degrading to the local dictionaries, cross-half channel/endpoint agreement |
+| `test/cell.test.mjs` | the real cell under a minimal hook runtime — all three pill forms, a stand-alone task rendering no button/role/chevron, the dropdown's rows, depths, indentation and single highlight, all three dismissal routes (re-click, Escape, outside pointer), session switch closing it, untrusted trees degrading to the plain pill, and unmount releasing both the interval and the document listeners |
+| `test/integration.test.mjs` | the two halves **against each other**: the real Host half reads a real `.trellis` tree on disk and that exact reply is fed to the real cell, so a wire-shape drift fails here even while both unit harnesses still pass |
+
+To see a task tree without inventing much, hang the task you are on under a throwaway parent.
+The pill picks it up within one poll, so this needs no restart:
+
+```bash
+python ./.trellis/scripts/task.py create "Tree demo" --slug tree-demo --no-start
+python ./.trellis/scripts/task.py add-subtask "$(ls -d .trellis/tasks/*tree-demo)" .trellis/tasks/<your-task>
+# the pill now reads:  Tree demo › [P2] <your task> · 进行中 · 子任务
+# undo:
+python ./.trellis/scripts/task.py remove-subtask "$(ls -d .trellis/tasks/*tree-demo)" .trellis/tasks/<your-task>
+python ./.trellis/scripts/task.py archive "$(ls -d .trellis/tasks/*tree-demo)" --skip-branch-validation
+```
 
 Without a browser, the channel answers at `POST {channel}/{endpoint}`:
 

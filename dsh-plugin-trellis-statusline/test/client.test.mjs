@@ -144,6 +144,16 @@ check('stylesheet is tagged with the plugin', styleTags[0].dataset.plugin, packa
 check('stylesheet carries the pill rules', styleTags[0].textContent.includes('.trellis-statusline'), true)
 check('stylesheet carries the status rules', styleTags[0].textContent.includes('[data-status='), true)
 check('stylesheet uses theme tokens only', /var\(--dsw-[a-z0-9-]+\)/.test(styleTags[0].textContent), true)
+check('the pill is rounded and tinted (R8)', [
+  /\.trellis-statusline-pill\{[^}]*border-radius/.test(styleTags[0].textContent),
+  /\.trellis-statusline-pill\{[^}]*background:var\(--dsw-alias-bg-layer-2\)/.test(styleTags[0].textContent),
+], [true, true])
+check('stylesheet carries the dropdown and the tree indent', [
+  styleTags[0].textContent.includes('.trellis-statusline-menu{'),
+  styleTags[0].textContent.includes('.trellis-statusline-menurow[data-current="true"]'),
+  styleTags[0].textContent.includes(':not([data-depth="0"])'),
+], [true, true, true])
+check('the chevron is drawn, not typed as a glyph', /\.trellis-statusline-chevron\{[^}]*border-right/.test(styleTags[0].textContent), true)
 
 const sheet = effects.find((item) => String(item.label).includes('stylesheet'))
 check('stylesheet disposer removes the tag', (() => {

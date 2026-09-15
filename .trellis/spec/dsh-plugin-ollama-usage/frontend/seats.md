@@ -69,6 +69,27 @@ The `conversation.session.header.*` seats are declared by one entry in
   into the cell's props, so a locale change follows without re-registering. A cell cannot assume
   `t` arrives — keep the same dictionary reachable by hand and fall back to it.
 
+## Popovers inside a list seat
+
+A header cell may open its own dropdown. There is no platform helper for it in a
+dependency-free bundle — the official cells use `dsh-client-ui-primitives`, which a
+`react`-only bundle cannot require — so the pattern is:
+
+- **Root is `position:relative`, the popover is `position:absolute`.** The official jobs cell
+  does exactly this inside `.actions` (`top:calc(100% + 5px); left:0`), which is the proof that
+  the header does not clip its children. Give the popover a `z-index`.
+- **Register dismissal listeners on `document` while open, and remove them together.** One
+  `pointerdown` (close when the event target is outside the root) and one `keydown` (Escape).
+  Owning both in a single effect means they cannot leak one without the other, and unmounting
+  the cell is enough to release them.
+- **Only render a click target when there is something to open.** A `<span>` when there is not
+  — no `onClick`, no `tabindex`, no focus ring. A cell that can do nothing must not look like a
+  control.
+- **Indent a tree with margins, not `padding`.** A guide line drawn with `border-left` sits on
+  the row's own edge, so the edge has to move inward per level; `margin-left` does that and
+  `padding-left` does not. Same reasoning for drawing a chevron with two borders instead of a
+  `▾` character: a glyph depends on whichever font the user runs.
+
 ## Overlay seats
 
 `shell.overlay` is a click-through layer, but its **direct children get `pointer-events:auto`

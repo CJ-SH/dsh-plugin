@@ -7,66 +7,85 @@
 
 ## 一句话目标
 
-在 dsh web 的**会话头部**常驻显示「当前会话所在工作区的活动 Trellis 任务」（形如 `[P2] 标题 · 进行中`）。
+在 dsh web 的**会话头部**常驻显示「当前会话所在工作区的活动 Trellis 任务」，
+并在它属于父子体系时标出角色、可点击展开任务树（形如 `[P2] 标题 · 进行中 · 子任务`）。
 
-## 现状：AC1 已目视确认；随后按验收反馈做了两处修改，待二次重启生效
+## 现状：三轮反馈全部实现，自检 157/157，等待用户重启目视
 
 | 项 | 状态 |
 |---|---|
-| 步骤 0 三项实测复核 | ✅ 全部通过，结论已回写 `design.md` §2.1 / `prd.md` |
+| 步骤 0 三项实测复核 | ✅ 结论已回写 `design.md` §2.1 / `prd.md` |
 | 包实现（Host + Client + 清单 + patch） | ✅ `dsh-plugin-trellis-statusline/`，零依赖无构建 |
-| `npm test` | ✅ **100/100**（host 39 · client 36 · cell 25） |
+| `npm test` | ✅ **157/157**（host 54 · client 39 · cell 64） |
 | 安装 | ✅ 已链入 web profile；`--dump-config` 有 `- id: trellis-statusline` |
-| AC1 真机目视 | ✅ **用户已确认**（首次在 `.utilities` 席位可见） |
-| AC6 只读 | ✅ `.trellis/` 80 文件快照（清单+mtime+size+sha256）前后比对 **0 变更** |
-| trellis-check | ✅ 通过（删除了无调用方的投机 `cwd` 回退） |
-| 提交（第一轮） | ✅ meta-repo `2520c79`（插件包 + spec）、`a5b00a9`（便签） |
-| **二次反馈的两处修改** | ⏳ 已实现、自检通过，**待在重启后目视确认** |
+| AC1 真机目视 | ✅ 用户已确认（第一轮，`.utilities` 席位） |
+| AC6 只读 | ✅ `.trellis/` 快照前后比对 **0 变更**（建树读全部 task.json 后复测仍为 0） |
+| trellis-check | ✅ 通过 |
+| 提交 | ✅ `2520c79` `a5b00a9` `16730a6` `db84de8` `c840e81` + 本轮 |
+| **第三轮增量（R6–R9）的真机目视** | ⏳ **待用户重启** |
 
-## 二次反馈的两处修改（2026-09-15）
+## 第一轮反馈：席位迁移 + 误报修复
 
-**1. 席位迁移（D2 修订）**：`conversation.session.header.utilities` → `conversation.session.header.actions`，
-`order: 10`。理由：`.actions` 是 "Title-adjacent Session actions"，紧邻会话标题、横向空间更足；
-用户要求 pill 紧挨「会话预设模式」(`agent-preset`, order -10) 右侧，`10` 正好夹在它与
-`job-list`(20) 之间。已改 `design.md` §3、`prd.md` D2/D3、spec `seats.md`。
+**席位（D2 修订）**：`.utilities` → **`.actions`**，`order: 10`（夹在 `agent-preset`(-10) 与
+`job-list`(20) 之间，即会话预设模式右侧）。
 
-**2. 修复误报（D1 修订，`design.md` §2.2.1）**：用户报告其他工作区显示
-`[P1] Bootstrap Guidelines · 进行中`，而其经验中不该出现。跨 5 个真实工作区实测确认是
-**扫描步骤的误报**：`trellis init` 给每个项目建的 `00-bootstrap-guidelines` 一出生就是
-`status: in_progress` 且永不被改（4/5 个工作区至今如此），而 **Trellis 自己从不扫描 `tasks/`**
-（`resolve_active_task()` 只读会话指针）—— 只有 D1 第 3 步会把它翻出来。
+**误报修复（D1 修订，`design.md` §2.2.1）**：`trellis init` 给每个项目建的
+`00-bootstrap-guidelines` 一出生就是 `status: in_progress` 且永不被改（本机 5 个真实工作区里
+4 个如此），而 Trellis 自己**从不扫描 `tasks/`**（`resolve_active_task()` 只读会话指针）。
+修法：扫描候选必须 **`branch` 非空**（`task.py start` 正是那条既记录 branch、又写指针的命令）。
+指针路径不加此过滤。真机前后对比：4 个工作区由 `[P1] Bootstrap Guidelines · 进行中` 变为空态。
 
-修法：扫描候选**必须 `branch` 非空**。依据是 `task.py:88-131` 自己的注释 —— `task.py start`
-正是那条既记录 `branch`、又写运行时指针、还把 `planning → in_progress` 的命令。
-**指针路径不加此过滤**：指针本身就是"已开工"的直接证据，且非 git 仓库记录不到分支（`task.py:129-130`）。
+## 第三轮增量（R6–R9）：角色标记 + 可点击任务树
 
-真机前后对比（探针用无指针的 sessionId 强制走扫描路径）：
+> 已先把 R6–R9 / AC7–AC10 / D5–D7 写进 `prd.md`，技术设计写进 `design.md` §3.1–§3.5，
+> 执行清单写进 `implement.md` 第 7 步；提交 `c840e81` 是"文档先行"那一步。
 
-| 工作区 | 修正前 | 修正后 |
-|---|---|---|
-| `dsh-plugin` | `[P2] Trellis statusline plugin for dsh web · in_progress` | 同前（真任务，有分支） |
-| `dsh\any` / `dsh\backwave` / `java\ecms-backend` / `python\agent_demo` | `[P1] Bootstrap Guidelines · in_progress` | 空态 |
+**一处解释分叉已定准**：用户第 2 条"显示上只有一个父任务，其余都显示为子任务"——
+判定它约束的是**角色标记**（不引入祖/孙第三级），而第 3 条要的"文件夹目录 tree"保留**真实层级缩进**。
+两者不冲突：前者是标签，后者是形状。已写入 `prd.md` R7 + D5。
 
-副作用（已知、可接受）：非 git 工作区里"别人 start、本会话又无指针"的任务会漏报 → 空态。宁可漏报不误报。
+**pill 三种形态**（`design.md` §3.1）：
 
-## 下一步
+| 情况 | 文本 |
+|---|---|
+| 单任务（R6） | `[P2] 标题 · 进行中` ← 与旧版逐字符一致 |
+| 当前是根 | `[P1] 标题 · 进行中 · 父任务` |
+| 当前是子/孙 | `根标题 › [P2] 标题 · 进行中 · 子任务` |
 
-**需要再次重启 dsh web**（host 半边 `lib/index.js` 是普通 ESM，改动必须重启才会重新加载），然后确认：
+不变量：优先级方括号永远指当前任务；`›` 前永远是**根**标题。
 
-1. pill 从右上角 utilities 区移到了**标题右侧、会话预设模式右边**；
-2. 切到 `any` / `backwave` / `ecms-backend` / `agent_demo` 这类只有脚手架任务的工作区时，
-   整条 pill **不再出现**，而不是显示 Bootstrap Guidelines。
+**wire 契约**（`design.md` §3.2）：`task/read` 的 `value` 增加可选 `tree`（树即根节点，子节点递归）；
+`current: true` 只打在会话当前任务；树节点 title **不截断**（pill 的仍截断 48）。
 
-两项都确认后即可 `python ./.trellis/scripts/task.py archive .trellis/tasks/09-15-trellis-statusline`。
+**推导算法**（`design.md` §3.3）：活动节点集（跳过 `archive`，不套 status/branch 过滤）→
+`effectiveParent` 三级判定（自身 parent → 唯一认领者 → 无父）→ 上溯求根（visited + 上限 64 防环）
+→ 反向索引递归出参；整体 try/catch，异常降级为"无树"。
+
+**交互**（`design.md` §3.4）：无树时是 `span`（无 onClick/tabindex/焦点环）；有树时是 `button`，
+`aria-expanded` 同步；下拉用绝对定位（与官方 jobs cell 同款），三条关闭路径（再点/Esc/点击外部）
+共用一个 effect 注册并成对清理；`sessionId` 变化即收起。
+
+**测试**：host harness 逐条覆盖 §3.5 那张表（含半写链接、悬空父、历史 `children`、legacy `subtasks`、
+环、损坏节点、树 title 不截断），并对 plain + tree 两种工作区各做一次只读快照比对；
+cell harness 覆盖三种 pill 形态、下拉行列/深度/缩进/唯一高亮、三条关闭路径、卸载释放监听器。
+
+## 下一步：用户重启 dsh web 后目视
+
+1. 本工作区（单任务）→ pill 圆角灰底、**不可点击**、文本与旧版一致。
+2. 想看树：按 `README.md` 的「Try it with a tree」两条命令把本任务挂到一个临时父任务下，
+   **无需再重启**（轮询 10s 内跟随）→ pill 变成 `Tree demo › [P2] … · 进行中 · 子任务`；
+   点击 → 树展开、当前行高亮、Esc/外部点击/再点都能关。
+3. 反例：`any` / `backwave` / `ecms-backend` / `agent_demo` 仍是空态（无误报）。
+
+两项确认后可 `python ./.trellis/scripts/task.py archive .trellis/tasks/09-15-trellis-statusline`。
 
 ## 复现工具
 
-- `node .scratch/probe-workspaces.mjs` —— 对 5 个真实工作区跑真实 host 半边，打印命中的链路结果；
+- `node .scratch/probe-workspaces.mjs` —— 对 5 个真实工作区跑真实 host 半边；
   传路径参数可跑旧版本做前后对比（`node .scratch/probe-workspaces.mjs ./old-index.mjs`）。
-- `node .scratch/probe-real.mjs` —— 针对本工作区的完整字段级输出。
-
-收尾时删掉 `.scratch/` 即可。注意：**仓库根没有 `.gitignore`**，所以 `.scratch/` 实际并未被忽略
-（`AGENTS.md` 说"已在 .gitignore 中忽略"，与现状不符，未擅自改仓库配置）。
+- `node .scratch/probe-real.mjs` —— 针对本工作区的完整字段级输出（含树）。
+- 收尾时删掉 `.scratch/`。注意：**仓库根没有 `.gitignore`**，`.scratch/` 实际未被忽略
+  （`AGENTS.md` 说"已在 .gitignore 中忽略"，与现状不符，未擅自改仓库配置）。
 
 ## 关键实测事实（已并入 spec，避免重复调研）
 
