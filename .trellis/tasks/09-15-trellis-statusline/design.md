@@ -159,19 +159,20 @@ id 用**任务目录名**（`09-15-trellis-statusline`）——它同时是 `cur
 - 本地化：`ctx.locale.register('trellis-statusline', {zh, en})` + 注册项 `locale: 'trellis-statusline'`，
   由 owner 把绑定命名空间的 `t` 投进 props；**但不假设 `t` 一定到**——缺席时 cell 直接读同一份字典。
 
-### 3.1 角色与 pill 文本（R6/R7）
+### 3.1 角色与 pill 文本（R6/R7/R10）
 
 角色只有两种（R7）：`root`（树的根祖先 = 唯一的「父任务」）与 `child`（其余**全部**后代，
 含孙及更深）。`role = task.id === tree.id ? 'root' : 'child'`。
 
 | 情况 | pill 文本 |
 |---|---|
-| 无任务树（R6） | `[P2] 子标题 · 进行中` ← 与旧版逐字符一致 |
-| 当前是根 | `[P1] 父标题 · 进行中 · 父任务` |
-| 当前是子/孙 | `根标题 › [P2] 子标题 · 进行中 · 子任务` |
+| 无任务树（R6） | `[P2] 标题 · 进行中` |
+| 当前是根 | `[P1] 标题 · 进行中 · 父任务` |
+| 当前是子/孙 | `[P2] 标题 · 进行中 · 子任务` ← **R10：不再有 `根标题 ›` 前缀** |
 
-两条不变量：**优先级方括号永远指当前任务自己**（子任务行的前缀 `根标题 ›` 不带优先级，
-避免两个方括号互相干扰）；**`›` 前永远是根标题**，不是中间层标题——这与 R7"角色只有两级"一致。
+R10 之后 `tree.id` 不再进入 pill 文本，只用于两件事：判定"有没有树"（决定角色标记、箭头、
+可点击性）与渲染下拉。角色标记成为 pill 里唯一表达"它在树里"的东西，结构本身交给下拉（R9）；
+优先级方括号永远指当前任务自己这条不变量也因此更直白。
 
 ### 3.2 wire 契约（D6：与 pill 同源）
 
@@ -273,6 +274,40 @@ span.trellis-statusline[data-status][data-role][title]      position:relative; i
 | 当前任务自身 `task.json` 解析失败 | 走既有空态（`parseTask` 已返回 undefined） |
 | 树里某节点 `task.json` 解析失败 | 该节点及其子树不进树；不影响其它行 |
 | 会话没有 cwd / 无 `.trellis` | 走既有空态，无树 |
+
+### 3.6 新会话（hero）里的第二处席位（R11）
+
+**为什么需要第二处**：hero 阶段 `conversation.session.header` 整块被 shell 加上
+`.wSkVaW_headerHidden{display:none}` —— 头部是**挂载但不可见**，所以头部那颗 pill 在 hero 里
+既看不见、也拿不到"我该消失"的信号。唯一的办法是在别处再放一颗。
+
+**席位**：`conversation.input.dock`（`kind: list, scope: session, replaceRisk: none`，用途
+"输入框上方的整宽条目"，已有 todo/goal/queue/git-graph 四个真实占用者）。选它而不是
+`shell.overlay` 的三条理由见 `prd.md` D8；核心是 **hero 里存在真实的空会话**，
+所以会话作用域席位是活的，`sessionId` 直接由 props 给出，不需要任何 workspace 反查、
+不需要 `position:fixed`、不需要自己处理 pointer-events。
+
+**hero 判据（D9）**：`useSessions((s) => s.byId[sessionId]?.blank) === true`。
+这是 `ConversationRoot` 自己算 `summaryBlank` 用的同一个事实源。
+**不能用"头部 pill 没挂载"来判**——头部在 hero 里是挂载的（只是 `display:none`），
+计数器方案会永远认为"头部在显示"。
+
+**两种状态**：
+
+| 状态 | 头部 cell | dock cell |
+|---|---|---|
+| `sessionId === undefined`（无会话） | 不挂载 | 不挂载（席位是 session 作用域） |
+| blank 会话（hero，R11） | 挂载但被 shell 隐藏 | **显示 pill**（AC12） |
+| 普通会话 | 显示 pill | 渲染 `null`（AC13，不得出现第二颗） |
+
+**位置与展开方向（D10）**：dock cell 外面套一层
+`.trellis-statusline-dock{display:flex;justify-content:center;width:100%;max-width:var(--dsh-chat-content-width,720px);margin:0 auto;padding:0 16px 4px}`
+—— 与 hero 居中的观感一致，并复用 composer 的内容宽度变量。
+下拉在 dock 里**向上**展开（`bottom:calc(100% + 6px)`）：dock 就在 composer 上方，
+向下展开会盖住用户马上要打字的输入框。用 `data-placement="up"` 切换，头部那颗仍是向下。
+
+**共用**：两颗 cell 用同一个 `TaskPill({ sessionId, t, placement })` 组件与同一份
+`task/read` 契约，只有外层包装与展开方向不同。
 
 ## 4. 兼容、风险与权衡
 

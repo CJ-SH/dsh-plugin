@@ -111,6 +111,48 @@
   （指针命中时也读）。实测 5 个真实工作区最大 40 个任务，每 10s 一次 N 个小文件读可忽略；
   任务数千级的场景记为已知上界（见 design 风险表），届时加上限常量即可。
 
+## 增量需求 2（2026-09-15 第三轮验收反馈：R10–R11）
+
+- **R10 去掉根标题前缀**：pill 不再显示 `根标题 ›`，只留「当前任务 + 角色」。其余（角色标记、
+  圆角灰底、可点击、下拉树、高亮）**全部保持原样**。修订后 pill 三种形态：
+
+  | 情况 | 文本 |
+  |---|---|
+  | 单任务 | `[P2] 标题 · 进行中`（回到最初版本的形状） |
+  | 树根 | `[P1] 标题 · 进行中 · 父任务` |
+  | 树中其他位置 | `[P2] 标题 · 进行中 · 子任务` |
+
+- **R11 新会话（hero）界面也要显示**：新建会话、尚未发出第一条消息时，会话头部整块不渲染
+  （D2 原先接受的代价），pill 因此消失。现在要求在**该界面也显示当前工作区的任务**。
+
+### 增量验收标准 2
+
+- **AC11** 三种形态分别渲染出上表三行文本；**任何一行都不含 `›`**，
+  且 DOM 里不再有 `trellis-statusline-parent` 元素。
+- **AC12** 新建会话（blank session、头部 chrome 被隐藏）时，**输入框上方**出现同一颗 pill，
+  内容为该会话所在工作区的任务；点击同样能展开树。
+- **AC13** 普通会话（非 blank）**不得**出现第二颗 pill —— 输入框上方那颗必须渲染成 `null`。
+- **AC14** 未选中会话（`sessionId === undefined`，例如刚打开应用还没选工作区）不显示任何东西。
+
+### 增量决策 2
+
+- **D8 席位选 `conversation.input.dock`，不用 `shell.overlay`。** 理由（全部实测自 Slots provider）：
+  - hero 阶段**确实存在一个真实的空会话**（`ConversationRoot` 的
+    `hero = sessionId === undefined || shellPhase === "blank" && …`；头部只是被 `headerHidden`
+    这个 class 隐藏，并非没渲染）。所以**会话作用域的席位在 hero 里是活的**，
+    `conversation.input.dock` 能直接拿到 `sessionId`，不需要任何 workspace 反查。
+  - `conversation.input.dock` 是 `kind: list, scope: session, replaceRisk: none`，
+    用途正是"输入框上方的整宽条目"，且已有 todo/goal/queue/git-graph 四个真实占用者 ——
+    位置天然、无需自己定位。
+  - `shell.overlay` 需要自己 `position:fixed` 定位 + 处理 pointer-events，且本仓库 spec 明确
+    警告"整框盒子会吞掉全应用点击"；能不用就不用。
+- **D9 用 `blank` 判定 hero，而不是"头部 pill 是否挂载"。** 头部在 hero 里是
+  **挂载但被 CSS 隐藏**（`.wSkVaW_headerHidden{display:none}`），所以"没挂载即 hero"的计数器
+  方案会失效。改用 shell 自己用的那个事实：`useSessions((s) => s.byId[sessionId]?.blank)` ——
+  与 `ConversationRoot` 的 `summaryBlank` 同源。`blank === true` → hero，显示；否则 `null`。
+- **D10 输入框上方的下拉**向上展开**（`bottom:100%`）。** dock 就在 composer 上方，
+  向下展开会盖住用户马上要打字的输入框；向上是 hero 的空白区。
+
 ## 范围外
 
 - 不做任务启动/切换，不做任务列表或看板；不替代 `task.py start`。

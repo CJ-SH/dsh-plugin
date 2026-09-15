@@ -108,6 +108,43 @@
    点击 → 树展开、当前行高亮、Esc/外部点击/再次点击都能关。
 4. 反例：任务树被归档后 → pill 退回单任务形态（无 `tree`）。
 
+## 8. 增量 2：去掉根标题前缀 + 新会话界面（R10–R11，2026-09-15 第三轮反馈）
+
+> 前置：`design.md` §3.1（R10 修订）与 §3.6（hero 第二处席位）。测试先行。
+
+### 8.1 Client：pill 文本（R10）
+
+- 删掉 pill 里的 `trellis-statusline-parent` 分支与它的 CSS 规则。
+- 三种形态变成：`[P] 标题 · 状态` / `… · 父任务` / `… · 子任务`。
+- 验证：`test/cell.test.mjs` 的三行文本断言改成无 `›` 版本；
+  `test/integration.test.mjs` 的端到端文本同步。
+
+### 8.2 Client：hero 第二处席位（R11）
+
+- 把现有 cell 主体抽成 `TaskPill({ sessionId, t, placement })`，头部 cell 与新 dock cell 共用。
+- 新增 `HeroStatuslineCell({ sessionId, t, useSessions })`：
+  - `const blank = useSessions((s) => (sessionId === undefined ? undefined : s.byId[sessionId]?.blank))`
+  - `blank !== true` → `return null`（AC13；"没有会话"也天然不显示，AC14）
+  - 否则渲染 `<div class="trellis-statusline-dock"><TaskPill placement="up" …/></div>`
+- `ctx.slots.inject('conversation.input.dock', …)` 注册为
+  `{ name: 'conversation.input.dock', id: 'trellis-statusline-hero', order: -10, locale: CELL_ID }`。
+- CSS 补：`.trellis-statusline-dock` 与 `.trellis-statusline-menu[data-placement="up"]`。
+- 验证：cell harness 新增——`blank:true` → 渲染 dock 包装 + pill；`blank:false` → `null`；
+  `blank` 缺失 → `null`；dock 里的下拉带 `data-placement="up"`；client harness 断言**两个**席位。
+
+### 8.3 文档与提交
+
+- README：三种形态表更新（无 `›`）、新增「New-session view」小节、席位表补第二处、断言数同步。
+- spec `seats.md`：补两条平台事实——(1) blank session 里头部是 `display:none` 而非卸载；
+  (2) 由此得出的判定法：用 shell 自己的 `blank` 位，不要用"是否挂载"。
+- 提交一条 `feat:`。
+
+### 8.4 真机验证（用户手动重启）
+
+1. 普通会话 → 头部 pill，文本 `… · 子任务`（**无 `›`**）。
+2. 新建会话（hero）→ **输入框上方**出现同一颗 pill；点击 → 下拉**向上**展开、当前行高亮。
+3. 普通会话里输入框上方**不应**有第二颗 pill。
+
 ## 风险点与回滚
 
 | 风险点 | 回滚/兜底 |
@@ -117,3 +154,5 @@
 | 席位在 dsh 升级后改名/改 kind | 客户端 `slots.inject` 找不到槽即静默不注册（不报错、不阻断） |
 | 树推导在畸形数据上挂死 | visited + 迭代上限 64；`buildTree` 整体包在 try/catch 里，异常 → 当作无树 |
 | 下拉遮挡/裁切 | 与官方 jobs cell 同款绝对定位；若真被裁，退化为"只有角色标记、无下拉"（删一个 `tree` 渲染分支即可） |
+| hero 判据（`blank`）在 dsh 升级后语义变化 | 退化为"hero 里不显示"（回到今天的行为），不影响普通会话那颗；改一个选择器即可 |
+| dock 那颗在普通会话里误显示 | 会造成双 pill；AC13 有专门断言，且 cell harness 覆盖 `blank:false` |
