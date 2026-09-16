@@ -4,3 +4,6 @@
 [submodule "dsh-plugin-trellis-statusline"]
 	path = dsh-plugin-trellis-statusline
 	url = https://github.com/CJ-SH/dsh-plugin-trellis-statusline.git
+[submodule "dsh-plugin-ptc-bash"]
+	path = dsh-plugin-ptc-bash
+	url = https://github.com/CJ-SH/dsh-plugin-ptc-bash.git
