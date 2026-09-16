@@ -75,3 +75,26 @@ R2/R6 决策落地：statusline 与 ollama-usage 都改为自开 webServer 路�
 ### Status
 
 [OK] **Completed**
+
+
+## Session 4: 归档：09-16 调研任务与 09-15 statusline 任务
+<!-- trellis-session: v=2 fp=2ddb2a0b2b961a18 -->
+
+**Date**: 2026-09-16
+**Task**: 归档：09-16 调研任务与 09-15 statusline 任务
+**Package**: dsh-plugin-ollama-usage
+**Branch**: `master`
+
+### Summary
+
+两条活动任务均已归档（分支元数据都是 master==master、从未走 PR，故用 --skip-branch-validation）：09-16-dsh-channel-patch-research（R1-R6 全部落地、spec 增补、两个插件改造与发布收尾）与 09-15-trellis-statusline（插件功能三轮增量和真机验收均已完成并发布）。归档后活动任务为 0，运行时会话指针已随之清除。剩余待用户事项不变：重启目视（AC5）、npm 发布凭据、GitHub PAT revoke。
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `c237758` | chore(task): 物理删除测试用演示任务 09-15-tree-demo |
+
+### Status
+
+[OK] **Completed**
