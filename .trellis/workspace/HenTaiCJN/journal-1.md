@@ -52,3 +52,26 @@ R2/R6 决策落地：statusline 与 ollama-usage 都改为自开 webServer 路�
 ### Status
 
 [OK] **Completed**
+
+
+## Session 3: 收尾：物理删除测试用 Tree demo 任务
+<!-- trellis-session: v=2 fp=b2f0843c80c4b44b -->
+
+**Date**: 2026-09-16
+**Task**: 收尾：物理删除测试用 Tree demo 任务
+**Package**: dsh-plugin-ollama-usage
+**Branch**: `master`
+
+### Summary
+
+按用户要求物理删除测试产物 09-15-tree-demo（含归档副本），handoff.md 的过期复现步骤改写为删除记录；09-15-trellis-statusline 的 parent 已由归档流程清空，无悬空引用。活动任务保持 09-15-trellis-statusline 与 09-16-dsh-channel-patch-research（in_progress）—— 按用户上次明确指示本轮不归档。两个子模块干净且与远端一致（trellis 90a4aa1 / ollama-usage 65fc19f）。仍待用户：重启后真机目视（AC5）；npm 发布需凭据；GitHub PAT 建议 revoke。
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `c237758` | chore(task): 物理删除测试用演示任务 09-15-tree-demo |
+
+### Status
+
+[OK] **Completed**
