@@ -74,32 +74,56 @@ The `conversation.session.header.*` seats are declared by one entry in
 > Measured against `dsh 0.1.5-rc.2` on 2026-09-15 while building `dsh-plugin-trellis-statusline`.
 
 The Hero — the new-session view before the first message — is where a header-seat plugin silently
-disappears, and two facts about it are easy to get backwards:
+disappears, and three facts about it are easy to get backwards:
 
 - **A blank session is a real session.** `ConversationRoot` computes
   `hero = sessionId === undefined || shellPhase === "blank" && (openState === "open" || summaryBlank === true)`.
-  So the usual "new session" flow has a real id, and **session-scoped seats are alive in the Hero** —
-  `conversation.input.dock` (list, `scope: session`, "Full-width entries above the composer card",
-  `replaceRisk: none`) hands its cells `sessionId` directly. Prefer that over `shell.overlay`:
-  an overlay needs its own `position:fixed` and pointer-events handling, and the overlay's own
-  catalog warns that a full-frame box swallows every click in the application.
+  So the usual "new session" flow has a real id, and **session-scoped seats are alive in the Hero**.
 - **The header is hidden, not unmounted.** The Hero adds `.wSkVaW_headerHidden{display:none}` to the
   whole header block, so a header cell stays *mounted* while invisible.
+- **The Hero's composer stack has nothing additive below the card.** It is
+  `HeroShell → heroWorkspaceRow → conversation.input.dock → inputBar`, so the card is the last
+  child and the room under it is the stack's own `padding-bottom`.
 
-The consequence is a rule worth remembering: **never detect the Hero with "is the header cell
-mounted?"** — a mount counter will conclude the header is showing, forever. Read the flag the shell
-itself reads instead:
+Consequences worth remembering:
 
-```js
-const blank = useSessions((s) => (sessionId === undefined ? undefined : s.byId[sessionId]?.blank))
-```
+- **Never detect the Hero with "is the header cell mounted?"** — a mount counter will conclude the
+  header is showing, forever. Read the flag the shell itself reads instead:
 
-`SessionListState.byId[id].blank` is the "empty-log bit" `ConversationRoot` uses as `summaryBlank`,
-and `useSessions` is a standard prop of every root- and session-scoped seat. Two caveats: guard the
-hook like any projected prop (a seat that stops projecting it should cost the surface, not the client
-half), and mind the hook rules — an early `return null` *before* other hooks would change the hook
-count when `blank` flips. Pass the flag into a shared hook as an `enabled` argument and keep every
-hook unconditional, with the effect returning early when disabled so a hidden seat costs no request.
+  ```js
+  const blank = useSessions((s) => (sessionId === undefined ? undefined : s.byId[sessionId]?.blank))
+  ```
+
+  `SessionListState.byId[id].blank` is the "empty-log bit" `ConversationRoot` uses as `summaryBlank`.
+  A root-scoped seat has no `sessionId` prop, so take it from the same store
+  (`useSessions((s) => s.current)`), and make each selector return a primitive — a selector that
+  builds a fresh object defeats the store's reference comparison on every read. **In a frame-wide
+  seat, `blank` is not enough**: it stays true while another main panel is on screen, so also
+  require `usePanelInfo((s) => s.activePanelId) === null` ("the Conversation is displayed").
+  Guard the hooks like any projected prop, and mind the hook rules: an early `return null` *before*
+  other hooks would change the hook count when `blank` flips. Pass the flags into a shared hook as
+  an `enabled` argument, keep every hook unconditional, and let the effect return early so a hidden
+  seat costs no request.
+- **Read the render site, not the slot catalog description.** The catalog says
+  `conversation.composer.dock` is "Ambient entries below the composer card", which reads as exactly
+  the seat for a status line under the input. Its render site gates it on `variant === "composer"`,
+  and the Hero sets `variant === "hero"`, so it never renders there at all.
+  `conversation.input.dock` renders in both (gated only on `input`/`sessionId`). A minute at the
+  render site beats a rewrite.
+- **When no seat is where you need it, `shell.overlay` plus measurement is the sanctioned route.**
+  The overlay is root-scoped, `replaceRisk: none`, and click-through. Anchor with the slot protocol's
+  own marker (`document.querySelector('[data-slot="conversation.composer.bar"]')`), never a product
+  CSS class. A **zero-sized rect means a `display:contents` wrapper**, so keep descending a bounded
+  depth instead of concluding "not found". Measure relative to your own box — the overlay layer's
+  origin is not the viewport — and subtract the anchor's computed `padding-bottom` to land under its
+  visible edge. Re-measure with a `ResizeObserver` on your parent and on the anchor, plus a viewport
+  `resize` listener, and release them together. Keep `pointer-events:none` on the zero-size entry and
+  `auto` only on the child that draws, and render **nothing** when measurement fails: a changed
+  layout should cost the surface, not misplace it.
+- **One trap in that pattern**: the wrapper cannot be measured before it exists, and its data often
+  arrives a render later. An effect keyed only on "should this show" measures nothing on the first
+  pass and never tries again — the surface then stays hidden forever. Include "is there anything to
+  draw" in the dependencies.
 
 ## Popovers inside a list seat
 

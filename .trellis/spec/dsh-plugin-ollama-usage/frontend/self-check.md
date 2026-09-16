@@ -72,7 +72,6 @@ Restarting dsh ends an agent's own process: hand that step to the user.
 | Add an npm dependency, or import `@deepseek-ai/*` in the host half | the package is deliberately dependency-free and the suite asserts it |
 | Throw inside `apply` | a throwing row takes the whole plugin tree down |
 | Wrap a scope-returning registration in `ctx.effect` | `TypeError: Invalid effect` |
-| Rebuild the user's `pnpm-lock.yaml` for `minimumReleaseAge` | the refusal comes from existing lockfile entries; relax it for one command |
 | Commit the meta-repo before the submodule | the pointer would name a commit that does not exist yet |
 
 ## Git

@@ -81,21 +81,40 @@ cell harness 覆盖三种 pill 形态、下拉行列/深度/缩进/唯一高亮�
   `hero = sessionId === undefined || shellPhase === "blank" && …`），所以**会话作用域席位是活的**。
 - 头部在 hero 里是**挂载但被 CSS 隐藏**（`.wSkVaW_headerHidden{display:none}`），
   所以"头部 pill 没挂载即 hero"的计数器方案**会失效**。
-- 选 **`conversation.input.dock`**（list / session / replaceRisk none / 输入框上方整宽条目）
-  而不是 `shell.overlay`：不用自己 `position:fixed`、不用自己处理 pointer-events、
-  直接拿到 `sessionId`。
-- hero 判据用 shell 自己用的那个位：`useSessions((s) => s.byId[sessionId]?.blank)`。
-- 那颗 pill 的下拉**向上**展开（`data-placement="up"`），否则会盖住用户马上要打字的输入框。
+- **第三轮定案：`shell.overlay` + 自定位。** 排除过程值得记住：
+  - `conversation.composer.dock` 的目录描述是 "below the composer card"，看着正合适，但
+    **hero 里根本不渲染**（渲染点 `variant === "composer"`，hero 是 `variant === "hero"`）。
+    **教训：判断席位在某状态下是否渲染，要读渲染点，不要读目录描述。**
+  - `input.dock`（卡片上方）观感被否；`input.left/right` 在卡片**内部**；`input.overlay` 是卡片内锚点；
+    `composer.bar` / `hero.*` 都是 single 席位，占用会顶掉官方控件。只剩 overlay。
+  - hero composer stack 真实结构：`HeroShell → heroWorkspaceRow → input.dock → inputBar`，
+    **卡片是最后一个子元素**，所以"卡片下方"就是栈自己的 `padding-bottom:32px` 空带，落点安全。
+  - 定位：锚点 `[data-slot="conversation.composer.bar"]`（slot 协议自己的标记）+
+    `resolveBox`（零尺寸 = `display:contents` 包装，要继续往下找）；坐标相对自己的 overlay 盒子；
+    水平居中于卡片（该区域官方环境行容器本身就是 `align-items:center`）；
+    `ResizeObserver` + 视口 `resize` 成对清理；**测不出来就什么都不画**（graceful）。
+  - wrapper `pointer-events:none` + slot `auto`（overlay 层是 click-through 的）。
+  - **测试抓到的真 bug**：测量 effect 只依赖 `[enabled]`，而任务是挂载后一帧才到的 →
+    首帧无 wrapper、effect 直接返回，之后再也不测量 → pill 永远 hidden。依赖必须含 `hasPill`。
+- hero 判据用 shell 自己用的那个位：`useSessions((s) => s.byId[id]?.blank)`；root 作用域没有
+  `sessionId` prop，当前会话另取 `useSessions((s) => s.current)`。
 - 非 blank 会话渲染 `null`（否则会双 pill），且**不轮询**（`enabled=false` 时 effect 提前返回）。
+- 下拉**向下**展开；"向上展开"的 `data-placement` 分支已随位置改动删除（不留死分支）。
 
-两处平台事实已写进 spec `seats.md` 的「The blank-session (Hero) phase」一节。
+spec `seats.md` 的「The blank-session (Hero) phase」已更新为四条：blank 会话是真实会话、
+头部是隐藏而非卸载、**读渲染点而非目录描述**、以及 overlay+测量那套的完整要点（含上面那个依赖陷阱）。
 
 ## 下一步：用户重启 dsh web 后目视
 
 1. 普通会话 → 头部 pill，文本 `… · 子任务`（**无 `›`**）。
-2. 新建会话（hero）→ **输入框上方**出现同一颗 pill（`Tree demo` 是父任务，所以当前任务显示
-   `[P2] Trellis statusline plugin for dsh web · 进行中 · 子任务`）；点击 → 下拉**向上**展开、当前行高亮。
-3. 普通会话里输入框上方**不应**有第二颗 pill。
+2. 新建会话（hero）→ **输入框卡片下方**（居中对齐于卡片）出现同一颗 pill
+   （`Tree demo` 是父任务，所以当前任务显示
+   `[P2] Trellis statusline plugin for dsh web · 进行中 · 子任务`）；点击 → 下拉向下展开、当前行高亮。
+3. 普通会话里卡片下方**不应**有第二颗 pill，且 hero 这颗**不应挡住**任何点击（overlay click-through）。
+
+**注意（本轮起生效）**：`AGENTS.md` 新增"禁止 agent 自动 git 提交、推送"，所以本轮改动
+**没有提交**，等用户明确同意再提交。之前几轮的提交（`2520c79` … `fe8cf04`）已经存在于历史里，
+未经要求不要改写。
 
 撤销演示任务（可选）：
 ```bash

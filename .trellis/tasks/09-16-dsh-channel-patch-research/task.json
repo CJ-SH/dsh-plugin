@@ -1,8 +1,8 @@
 {
-  "id": "trellis-statusline",
-  "name": "trellis-statusline",
-  "title": "Trellis statusline plugin for dsh web",
-  "description": "Show the active Trellis task for the current dsh web session",
+  "id": "dsh-channel-patch-research",
+  "name": "dsh-channel-patch-research",
+  "title": "dsh 通道注册与 connection 行 patch 的调研",
+  "description": "查清插件通道注册对 shipped connection 行 inject 的依赖是否必需，并决定是否改用无覆盖方案",
   "status": "in_progress",
   "dev_type": null,
   "scope": null,
@@ -10,7 +10,7 @@
   "priority": "P2",
   "creator": "HenTaiCJN",
   "assignee": "HenTaiCJN",
-  "createdAt": "2026-09-15",
+  "createdAt": "2026-09-16",
   "completedAt": null,
   "branch": "master",
   "base_branch": "master",
@@ -18,10 +18,8 @@
   "commit": null,
   "pr_url": null,
   "subtasks": [],
-  "children": [
-    "09-16-dsh-channel-patch-research"
-  ],
-  "parent": "09-15-tree-demo",
+  "children": [],
+  "parent": "09-15-trellis-statusline",
   "relatedFiles": [],
   "notes": "",
   "meta": {}

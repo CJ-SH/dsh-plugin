@@ -1,0 +1,5 @@
+# F7 probe overlay: restate the shipped `connection` row's inject list, undoing
+# the widening that dsh-plugin-trellis-statusline's bundle patch applies.
+- id: connection
+  inject:
+    - webRuntime

@@ -20,15 +20,22 @@ Managed by Trellis. Edits outside this block are preserved; edits inside may be 
 
 <!-- TRELLIS:END -->
 
+# 禁止agent自动git提交、推送
+- git提交、推送需要用户明确同意才能执行
+- 将频繁的git提交只会造成git树的混乱
+
 <!-- WebSearch:START -->
 
 # 网络搜索约定
 
+- 请主动积极调用web search
 - 为避免重复造轮子、闷头干等行为，请善用网络搜索（web search功能、tool）
 
 ## 搜索的时机与频率
 
 - 在项目的各个阶段，都应该积极搜索，尤其是规划阶段、出现意料之外的情况下
+- 不局限于我上条的举例，对于用户提出的问题、规划等任何东西都可以使用web search
+- 搜索的结果，尤其是各种官方的文档中通常有最权威的方法或答案
 - 面对比较“私有”的情况，例如公司给自己开发的各种系统的业务逻辑，在网络上必然是没有的，只能自己依靠代码逻辑推测，此时就不用浪费搜索资源
 
 ## 质量约定

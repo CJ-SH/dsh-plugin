@@ -281,32 +281,69 @@ span.trellis-statusline[data-status][data-role][title]      position:relative; i
 `.wSkVaW_headerHidden{display:none}` —— 头部是**挂载但不可见**，所以头部那颗 pill 在 hero 里
 既看不见、也拿不到"我该消失"的信号。唯一的办法是在别处再放一颗。
 
-**席位**：`conversation.input.dock`（`kind: list, scope: session, replaceRisk: none`，用途
-"输入框上方的整宽条目"，已有 todo/goal/queue/git-graph 四个真实占用者）。选它而不是
-`shell.overlay` 的三条理由见 `prd.md` D8；核心是 **hero 里存在真实的空会话**，
-所以会话作用域席位是活的，`sessionId` 直接由 props 给出，不需要任何 workspace 反查、
-不需要 `position:fixed`、不需要自己处理 pointer-events。
+**席位**：`shell.overlay`（`kind: list, scope: root, replaceRisk: none`），**自定位**。
+这条路由排除法逼出来，逐条记清楚以免以后再走一遍：
 
-**hero 判据（D9）**：`useSessions((s) => s.byId[sessionId]?.blank) === true`。
-这是 `ConversationRoot` 自己算 `summaryBlank` 用的同一个事实源。
+| 候选 | 结果 |
+|---|---|
+| `conversation.composer.dock`（目录描述是 "below the composer card"） | ❌ **hero 里不渲染**：渲染点是 `variant === "composer" && …`，而 hero 设的是 `variant === "hero"`（`client.js:14906` / `16259`）—— 教训：**读渲染点，不要读目录描述** |
+| `conversation.input.dock`（卡片上方） | ✅ hero 里渲染（`zone !== undefined`），但用户在验收时否掉了观感 |
+| `conversation.input.left` / `input.right`（卡片内工具行） | ✅ 可用，但都在卡片**内部**，与"卡片下方"的要求不符 |
+| `conversation.input.overlay` | ✅ 渲染，但它是卡片内的**绝对定位锚点**（`.overlayAnchor`），不是状态行 |
+| `conversation.composer.bar` / `hero.brand.mark` / `hero.workspace` / `hero.agentPreset` | ❌ 都是 `single` 席位，占用会把官方控件顶掉 |
+| `shell.overlay` | ✅ 唯一能落在"卡片下方"且不顶掉任何东西的席位 |
+
+**hero composer stack 的真实结构**（`client.js:14916`），它决定了"卡片下方"到底是什么：
+
+```
+div.composerStack.composerHero        gap:8px; padding-bottom:32px; align-self:center
+  ├─ HeroShell                        标题（鱼 + headline）
+  ├─ heroWorkspaceRow                 工作区选择器 —— 在卡片**上方**
+  ├─ conversation.input.dock
+  └─ inputBar = renderSlot("conversation.composer.bar")   ← 卡片是**最后一个**子元素
+```
+
+所以"卡片下方"就是栈自己的 `padding-bottom:32px` 空带 —— 那里没有任何东西会被压到，落点安全。
+
+**定位实现**（照搬同仓库 `dsh-plugin-ollama-usage` 已在用的技术，见其 `measureHero`）：
+
+- 锚点用 **slot 协议自己的标记** `[data-slot="conversation.composer.bar"]`，不是产品 CSS 类。
+- `resolveBox(element, depth)`：slot outlet 可能是 `display:contents` 包装（零尺寸矩形）；
+  零矩形意味着"继续往里找"而不是"没有"，深度上限 4 防病态树。
+- 坐标**相对自己的 overlay 盒子**（`anchor.left - own.left` 等），因为 overlay 层的原点不是视口。
+- 减去锚点自身的 `paddingBottom`，让 pill 落在卡片可见边缘之下而不是透明带之下。
+- 水平**居中于卡片** —— 这是该位置的原生对齐：同一区域的官方环境行容器自己就是 `align-items:center`。
+- 重新测量：`ResizeObserver` 观察自己的父节点 + 锚点及其父节点，另加视口 `resize` 监听，成对清理。
+- **测量不出来就什么都不画**：wrapper 始终渲染（否则无从测量），slot 在拿到坐标前是
+  `visibility:hidden`（`visibility` 保留盒子可测量，`display:none` 不行）。
+
+**一个被测试抓出来的真 bug**：测量 effect 最初只依赖 `[enabled]`。任务是挂载后一帧才到的，
+首帧没有 wrapper → `rootRef.current === null` → effect 直接返回、什么都没注册；任务到达后
+wrapper 挂上了，但 `enabled` 没变 → effect 不再跑 → **pill 永远停在 hidden**。
+修法：依赖加上 `hasPill`（`pill !== null` 的布尔值，跨渲染稳定）。
+
+**hero 判据（D9）**：`useSessions((s) => s.byId[sessionId]?.blank) === true`，
+与 `ConversationRoot` 的 `summaryBlank` 同源。root 作用域**没有** `sessionId` prop，
+所以还要 `useSessions((s) => s.current)` 取当前会话；两个选择器各返回原始值，
+避免每次读都构造新对象而破坏 store 的引用比较。
 **不能用"头部 pill 没挂载"来判**——头部在 hero 里是挂载的（只是 `display:none`），
 计数器方案会永远认为"头部在显示"。
 
 **两种状态**：
 
-| 状态 | 头部 cell | dock cell |
+| 状态 | 头部 cell | hero cell |
 |---|---|---|
-| `sessionId === undefined`（无会话） | 不挂载 | 不挂载（席位是 session 作用域） |
-| blank 会话（hero，R11） | 挂载但被 shell 隐藏 | **显示 pill**（AC12） |
+| `current === undefined`（无会话） | 不挂载 | 渲染 `null`（AC14） |
+| blank 会话（hero，R11） | 挂载但被 shell 隐藏 | **overlay 里画出 pill**（AC12） |
 | 普通会话 | 显示 pill | 渲染 `null`（AC13，不得出现第二颗） |
 
-**位置与展开方向（D10）**：dock cell 外面套一层
-`.trellis-statusline-dock{display:flex;justify-content:center;width:100%;max-width:var(--dsh-chat-content-width,720px);margin:0 auto;padding:0 16px 4px}`
-—— 与 hero 居中的观感一致，并复用 composer 的内容宽度变量。
-下拉在 dock 里**向上**展开（`bottom:calc(100% + 6px)`）：dock 就在 composer 上方，
-向下展开会盖住用户马上要打字的输入框。用 `data-placement="up"` 切换，头部那颗仍是向下。
+**外层与点击**：`.trellis-statusline-hero{position:absolute;left:0;top:0;width:100%;height:0;pointer-events:none}`
++ `.trellis-statusline-hero-slot{position:absolute;left:0;top:0;display:inline-flex;pointer-events:auto}`
+—— overlay 层本身click-through，只有承载 pill 的那一小块重新打开 pointer-events，
+所以它绝不会挡住底下的应用（这正是 spec 对 `shell.overlay` 的硬要求）。
+下拉**向下**展开（下方就是那条空带），不需要方向开关。
 
-**共用**：两颗 cell 用同一个 `TaskPill({ sessionId, t, placement })` 组件与同一份
+**共用**：两颗 cell 共用同一个 `useTaskPill(sessionId, t, enabled)` 自定义 hook 与同一份
 `task/read` 契约，只有外层包装与展开方向不同。
 
 ## 4. 兼容、风险与权衡
@@ -322,6 +359,8 @@ span.trellis-statusline[data-status][data-role][title]      position:relative; i
 | 下拉被头部裁切 | 菜单被 `overflow:hidden` 剪掉 | 用与官方同席位 jobs cell 完全相同的绝对定位方案（它已验证可用）；`z-index:100` |
 | 树推导遇到环 / 半写链接 / 悬空父 | 挂死或归属错误 | visited + 迭代上限 64；`effectiveParent` 三级判定；§3.5 逐条有测试 |
 | 只读保证 | 误写会污染用户仓库 | host 只做 `fs.readFile`/`readdir`；不引入任何写路径；测试断言无写 API 调用 |
+| hero pill 依赖测量 composer 几何（D8 自定位） | dsh 改 composer 布局后定位失效或落空 | 锚点用 slot 协议的 `data-slot` 标记而非 CSS 类；**测量不出来就什么都不画**（graceful），不会错位；spec 已记录该标记与 `resolveBox` 的必要性 |
+| hero pill 挡住底下的应用 | overlay 层吞掉点击 | wrapper `pointer-events:none` + slot `auto`，client harness 有 CSS 断言 |
 
 ## 5. 运维与回滚
 

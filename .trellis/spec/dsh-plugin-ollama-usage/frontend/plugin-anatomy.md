@@ -84,9 +84,7 @@ when only one entry changes.
 | RPC probe | `POST {channel}/{endpoint}` with a browser session cookie | `{"ok":true,…}` |
 
 Loading a plugin requires restarting dsh; that restart ends an agent's own process, so hand the
-command to the user. A profile with `minimumReleaseAge` may refuse an install because of
-*existing* lockfile entries — relax it for that one command instead of rebuilding the user's
-lockfile.
+command to the user.
 
 ## Naming conventions
 

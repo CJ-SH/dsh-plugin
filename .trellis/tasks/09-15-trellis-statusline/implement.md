@@ -119,18 +119,34 @@
 - 验证：`test/cell.test.mjs` 的三行文本断言改成无 `›` 版本；
   `test/integration.test.mjs` 的端到端文本同步。
 
-### 8.2 Client：hero 第二处席位（R11）
+### 8.2 Client：hero 第二处席位（R11）——最终形态
 
-- 把现有 cell 主体抽成 `TaskPill({ sessionId, t, placement })`，头部 cell 与新 dock cell 共用。
-- 新增 `HeroStatuslineCell({ sessionId, t, useSessions })`：
-  - `const blank = useSessions((s) => (sessionId === undefined ? undefined : s.byId[sessionId]?.blank))`
-  - `blank !== true` → `return null`（AC13；"没有会话"也天然不显示，AC14）
-  - 否则渲染 `<div class="trellis-statusline-dock"><TaskPill placement="up" …/></div>`
-- `ctx.slots.inject('conversation.input.dock', …)` 注册为
-  `{ name: 'conversation.input.dock', id: 'trellis-statusline-hero', order: -10, locale: CELL_ID }`。
-- CSS 补：`.trellis-statusline-dock` 与 `.trellis-statusline-menu[data-placement="up"]`。
-- 验证：cell harness 新增——`blank:true` → 渲染 dock 包装 + pill；`blank:false` → `null`；
-  `blank` 缺失 → `null`；dock 里的下拉带 `data-placement="up"`；client harness 断言**两个**席位。
+- 把 cell 主体抽成 `useTaskPill(sessionId, t, enabled)` 自定义 hook，两颗 pill 共用。
+- 新增 `HeroStatuslineCell({ t, useSessions })`（root 作用域，**没有** `sessionId` prop）：
+  - `sessionId = useSessions((s) => s.current)`；`blank = useSessions((s) => s.byId[id]?.blank)`
+  - `blank !== true` → `return null`（AC13；无会话也天然不显示，AC14）
+  - 否则渲染 overlay 包装 + slot，slot 内是 pill；坐标由测量得到。
+- `ctx.slots.inject('shell.overlay', …)` 注册为
+  `{ name: 'shell.overlay', id: 'trellis-statusline-hero', order: 1, locale: CELL_ID }`。
+- 定位：`[data-slot="conversation.composer.bar"]` + `resolveBox` + 相对自己盒子的坐标 +
+  水平居中于卡片；`ResizeObserver`（自己的父节点、锚点及其父节点）+ 视口 `resize` 成对清理。
+- CSS：`.trellis-statusline-hero`（`pointer-events:none`，零高度）+
+  `.trellis-statusline-hero-slot`（`pointer-events:auto`）。**不要**方向开关。
+- 验证：cell harness——`blank:true` → 渲染 overlay 包装；未测量到布局时 slot 是
+  `visibility:hidden`；给出 rect 并触发 re-measure 后断言 `left/top` 具体数值；
+  视口监听器注册且卸载时释放；`blank:false` → `null` 且**零请求零定时器**；
+  `useSessions` 缺失 → 降级不抛；client harness 断言**两个**席位的 slot/id/order 与 click-through CSS。
+
+### 8.2b 席位两次改判（2026-09-15 验收反馈）
+
+- 第一轮 `conversation.input.dock`（卡片**上方**）→ 用户否掉观感。
+- 第二轮 `conversation.composer.dock`（目录描述"below the composer card"）→ **hero 里完全没显示**：
+  渲染点是 `variant === "composer"`，而 hero 是 `variant === "hero"`。
+  **教训：判断席位在某状态下是否渲染，读渲染点，别读目录描述。**
+- 第三轮定案 `shell.overlay` + 自定位（见 8.2）。
+- **effect 依赖必须含 `hasPill`**：任务是挂载后一帧才到的，只依赖 `[enabled]` 会让首帧无 wrapper、
+  effect 直接返回，之后再也不测量 → pill 永远 hidden。这个 bug 是测试抓到的。
+- 删除 `data-placement` 参数、`[data-placement="up"]` 规则与相应断言（无第二种方向，不留死分支）。
 
 ### 8.3 文档与提交
 
@@ -142,8 +158,8 @@
 ### 8.4 真机验证（用户手动重启）
 
 1. 普通会话 → 头部 pill，文本 `… · 子任务`（**无 `›`**）。
-2. 新建会话（hero）→ **输入框上方**出现同一颗 pill；点击 → 下拉**向上**展开、当前行高亮。
-3. 普通会话里输入框上方**不应**有第二颗 pill。
+2. 新建会话（hero）→ **输入框卡片下方**出现同一颗 pill；点击 → 下拉向下展开、当前行高亮。
+3. 普通会话里卡片下方**不应**有第二颗 pill（那里只有官方 `stats`）。
 
 ## 风险点与回滚
 

@@ -1,0 +1,4 @@
+[opencode-session-id] mounted: providers=[opencode, opencode-go] headers=[x-opencode-session, x-session-affinity, x-client-request-id, x-session-id] hosts=[opencode.ai] sessionId=nanoid8(alphanumeric)
+[ollama-usage] RPC channel unavailable: cannot get property "webServer" without inject
+[trellis-statusline] RPC channel unavailable: cannot get property "webServer" without inject
+dsh web: http://127.0.0.1:8791/?token=sf5cFxvPXLGUeGgNtMd1LlKa-j8G6QrYDjn6UuH6Qwg

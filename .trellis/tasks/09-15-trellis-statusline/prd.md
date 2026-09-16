@@ -136,22 +136,29 @@
 
 ### 增量决策 2
 
-- **D8 席位选 `conversation.input.dock`，不用 `shell.overlay`。** 理由（全部实测自 Slots provider）：
-  - hero 阶段**确实存在一个真实的空会话**（`ConversationRoot` 的
-    `hero = sessionId === undefined || shellPhase === "blank" && …`；头部只是被 `headerHidden`
-    这个 class 隐藏，并非没渲染）。所以**会话作用域的席位在 hero 里是活的**，
-    `conversation.input.dock` 能直接拿到 `sessionId`，不需要任何 workspace 反查。
-  - `conversation.input.dock` 是 `kind: list, scope: session, replaceRisk: none`，
-    用途正是"输入框上方的整宽条目"，且已有 todo/goal/queue/git-graph 四个真实占用者 ——
-    位置天然、无需自己定位。
-  - `shell.overlay` 需要自己 `position:fixed` 定位 + 处理 pointer-events，且本仓库 spec 明确
-    警告"整框盒子会吞掉全应用点击"；能不用就不用。
+- **D8 席位：`shell.overlay` 自定位**（第三轮定案）。逐条排除的结果（全部实测自**渲染点**）：
+  - `conversation.composer.dock` 的目录描述是 "below the composer card"，看着正合适，但
+    **hero 里根本不渲染**——渲染点是 `variant === "composer"`，而 hero 设的是 `variant === "hero"`
+    （`client.js:14906`/`16259`）。这是本轮唯一的返工原因。教训写进 spec：
+    **判断某个席位在你需要的状态下是否渲染，要读渲染点，不要读目录描述。**
+  - `conversation.input.dock`（卡片上方）hero 里能渲染，但观感被用户否掉；
+    `input.left`/`input.right` 在卡片**内部**，与"卡片下方"不符；
+    `input.overlay` 是卡片内的绝对定位锚点，不是状态行；
+    `composer.bar`/`hero.brand.mark`/`hero.workspace`/`hero.agentPreset` 都是 `single`，
+    占用会顶掉官方控件。
+  - 只剩 `shell.overlay`：root 作用域、list、`replaceRisk: none`，且同仓库 `dsh-plugin-ollama-usage`
+    已经在里面挂了一颗 hero pill，用的正是"量取 composer 几何再定位"这套。
 - **D9 用 `blank` 判定 hero，而不是"头部 pill 是否挂载"。** 头部在 hero 里是
   **挂载但被 CSS 隐藏**（`.wSkVaW_headerHidden{display:none}`），所以"没挂载即 hero"的计数器
-  方案会失效。改用 shell 自己用的那个事实：`useSessions((s) => s.byId[sessionId]?.blank)` ——
-  与 `ConversationRoot` 的 `summaryBlank` 同源。`blank === true` → hero，显示；否则 `null`。
-- **D10 输入框上方的下拉**向上展开**（`bottom:100%`）。** dock 就在 composer 上方，
-  向下展开会盖住用户马上要打字的输入框；向上是 hero 的空白区。
+  方案会失效。改用 shell 自己用的那个事实：`useSessions((s) => s.byId[id]?.blank)` ——
+  与 `ConversationRoot` 的 `summaryBlank` 同源。root 作用域没有 `sessionId` prop，
+  当前会话另取 `useSessions((s) => s.current)`。
+- **D10 定位只用 slot 协议自己的标记，且测不出来就不画。** 锚点取
+  `[data-slot="conversation.composer.bar"]`（不是产品 CSS 类）；`display:contents` 包装会产生
+  零尺寸矩形，所以零矩形要继续往里找（`resolveBox`）；坐标相对 overlay 自己的盒子
+  （overlay 层的原点不是视口）；水平居中于卡片——该区域官方环境行容器本身就是 `align-items:center`。
+  **测量失败 → 什么都不渲染**，所以 dsh 改布局时最坏结果是"hero 里不显示"，而不是画错位置。
+  随之**删除**上一轮为"卡片上方"设计的向上展开分支（不留无人使用的分支）。
 
 ## 范围外
 
