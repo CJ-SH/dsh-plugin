@@ -108,21 +108,16 @@ spec `seats.md` 的「The blank-session (Hero) phase」已更新为四条：blan
 
 1. 普通会话 → 头部 pill，文本 `… · 子任务`（**无 `›`**）。
 2. 新建会话（hero）→ **输入框卡片下方**（居中对齐于卡片）出现同一颗 pill
-   （`Tree demo` 是父任务，所以当前任务显示
-   `[P2] Trellis statusline plugin for dsh web · 进行中 · 子任务`）；点击 → 下拉向下展开、当前行高亮。
+   （当时 `Tree demo` 是父任务，所以显示 `[P2] Trellis statusline plugin for dsh web · 进行中 · 子任务`；
+   该演示任务已于 **2026-09-16 物理删除**，所以现在这条会显示 `· 父任务`）；点击 → 下拉向下展开、当前行高亮。
 3. 普通会话里卡片下方**不应**有第二颗 pill，且 hero 这颗**不应挡住**任何点击（overlay click-through）。
 
 **注意（本轮起生效）**：`AGENTS.md` 新增"禁止 agent 自动 git 提交、推送"，所以本轮改动
 **没有提交**，等用户明确同意再提交。之前几轮的提交（`2520c79` … `fe8cf04`）已经存在于历史里，
 未经要求不要改写。
 
-撤销演示任务（可选）：
-```bash
-python ./.trellis/scripts/task.py remove-subtask tree-demo 09-15-trellis-statusline
-python ./.trellis/scripts/task.py archive tree-demo --skip-branch-validation
-```
-**注意**：`task.py` 的任务参数接受**裸任务名**（后缀匹配，歧义即报错），所以不要用
-`$(ls -d .trellis/tasks/*tree-demo)` —— 那是 Git Bash 语法，在 PowerShell 里会炸。
+演示任务 `09-15-tree-demo` 已于 **2026-09-16 物理删除**（连同归档副本），本任务的 `parent` 字段一并清空 ——
+上面的 `remove-subtask` / `archive` 步骤不再需要。
 
 确认后可 `python ./.trellis/scripts/task.py archive .trellis/tasks/09-15-trellis-statusline`。
 
