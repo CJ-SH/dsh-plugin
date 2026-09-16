@@ -8,7 +8,7 @@
 
 <!-- @@@auto:current-status -->
 - **Active File**: `journal-1.md`
-- **Total Sessions**: 1
+- **Total Sessions**: 2
 - **Last Active**: 2026-09-16
 <!-- @@@/auto:current-status -->
 
@@ -19,7 +19,7 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-1.md` | ~30 | Active |
+| `journal-1.md` | ~54 | Active |
 <!-- @@@/auto:active-documents -->
 
 ---
@@ -29,6 +29,7 @@
 <!-- @@@auto:session-history -->
 | # | Date | Title | Commits | Branch |
 |---|------|-------|---------|--------|
+| 2 | 2026-09-16 | 两个 dsh 插件改走自有路由 + README review + 发布推送（finish-work） | `997a8c6`, `2e95c20` | `master` |
 | 1 | 2026-09-16 | 两个 dsh 插件改走自有路由 + README/发布收尾 | `997a8c6` | `master` |
 <!-- @@@/auto:session-history -->
 
