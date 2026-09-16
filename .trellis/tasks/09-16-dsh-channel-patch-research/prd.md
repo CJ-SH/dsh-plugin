@@ -281,3 +281,19 @@ boot log 两行：`[ollama-usage] RPC channel unavailable: cannot get property "
 - **Q7（新）** `dsh-llm-ollama` 的 `/ollama-cloud` 通道随窄值一起失效（实测 404），要不要在
   `~/.dsh/profiles/web/cordis.patch.yml` 保留一行拓宽（该插件的设置 / 模型发现界面依赖它）？
 - **Q6（新）** 本次改动未提交（`AGENTS.md`：提交需用户明确同意）；父任务 README 重构等未提交改动也仍在。
+## 发布与仓库收尾（2026-09-16 本轮）
+
+- **README review**：两个插件的 README 都已按「用户优先」复核并修完 —— statusline 修正断言数（192 → 197）与
+  一段排版；ollama-usage 整篇重写（一句话简介 + 示例、要求、安装/卸载、两种凭据模式、取数口径、
+  「不碰别人的行」、数据保留、结构/自检、故障排查、License），断言数与实现同步（87/87）。
+- **发布元数据**：ollama-usage 补 `LICENSE`、`author`、`keywords`、`repository`、`files`（含 LICENSE），
+  并**删掉 `private: true`**（它会直接阻止 npm 发布）；`npm pack --dry-run` 两个包都通过（7 / 6 个文件）。
+- **GitHub**：新建 `CJ-SH/dsh-plugin-ollama-usage`（public，默认分支 main）并推送 `65fc19f`；
+  `CJ-SH/dsh-plugin-trellis-statusline` 推送 `90a4aa1`；两个仓库都加了 topics，README 匿名可读。
+- **meta 仓库**：`.gitmodules` 把 ollama-usage 的 URL 从相对路径改为 HTTPS（与另一个一致）；
+  新增 `.gitignore`（忽略 `.scratch/`）；子模块指针与任务/spec 记录一起提交 `997a8c6`（meta 仓库无 remote，故不推送）。
+- **npm 仍未发布**：本机没有 npm 凭据（`npm whoami` → ENEEDAUTH，`~/.npmrc` 无 token），`npm publish --dry-run` 明确要求先登录。
+  两个包已发布就绪，发布只差一步（二选一）：
+  `npm login` 后跑 `cd <pkg> && npm publish --access public`，或给一个 npm automation token 由我发布。
+- **安全**：本轮使用的 GitHub PAT（classic，`repo` 等 scope）已出现在会话里 —— 用完请 revoke；
+  连同 F9 记录的两个旧 PAT 一起处理。
