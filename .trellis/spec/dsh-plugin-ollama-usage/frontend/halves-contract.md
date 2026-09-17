@@ -145,6 +145,58 @@ ask the browser for it. The Host has two synchronous paths, and they are enough 
   by. So a session can be correlated across the browser, a tool subprocess and the filesystem
   without any id mapping.
 
+### Shell tools must forward `ctx.shellEnv.collect(exec)`
+
+> Measured against `dsh 0.1.5-rc.2` on 2026-09-17 while fixing the hand-written Git Bash tool in
+> `dsh-plugin-ptc-bash` (task `09-16-statusline-session-identity`).
+
+A tool that spawns a shell through `ctx.subprocess.spawn(spec)` inherits **no** `DSH_*` fact by
+default: the subprocess service scrubs every ambient `DSH_*` name (case-insensitively on Windows) so
+that "the current harness facts" cannot leak into a child implicitly. The only supported channel is
+the spawn spec's own `env`; its entries are merged over the scrubbed parent environment.
+
+```js
+export const inject = ['subprocess', 'tools', 'systemPrompt', 'shellEnv'] // ← + shellEnv
+
+const collectShellEnv = (ctx, exec) => {
+  try {
+    const registry = ctx.shellEnv
+    if (registry === undefined || typeof registry.collect !== 'function') return undefined
+    const overlay = registry.collect(exec)
+    return overlay === undefined || Object.keys(overlay).length === 0 ? undefined : overlay
+  } catch {
+    return undefined
+  }
+}
+
+const spawnSpec = (signal) => ({
+  argv: [shell, '-c', command], stdio, graceMs,
+  ...(overlay !== undefined ? { env: overlay } : {}), // ← the only added field
+  ...(signal !== undefined ? { signal } : {}),
+})
+```
+
+| Contract | Where it holds |
+|---|---|
+| `collect(exec)` is computed per execution: always `DSH_HOME` and `DSH_SHELL=1`, plus `DSH_SESSION_ID` **only** when `execution.agent !== undefined` | `@deepseek-ai/dsh-shell-env` |
+| Ambient `DSH_*` are scrubbed; only a spec `env` survives the scrub | `@deepseek-ai/dsh-subprocess` |
+| The shipped consumers do exactly this: `dsh-tool-bash` and `dsh-tool-pwsh` both call `ctx.shellEnv.collect(exec)` into their spawn spec | those packages |
+
+- **Declare** `shellEnv` in `inject`. An undeclared service reads as `undefined` under the
+  capability-scoped proxy, and the failure mode is silence — never a throw.
+- **Normalize** a missing/empty/failed collect to *no* `env` key, so the spawn spec stays
+  byte-identical on a composition that mounts no shell-env service.
+- **What breaks without it (Windows):** the official `tool-bash` row is disabled by the PTC preset,
+  so the hand-written Git Bash tool is the only bash. Trellis resolves identity from
+  `DSH_SESSION_ID` first; without it `task.py create|start` prints
+  "Session identity not available ... (degraded mode)" and writes **no** session pointer, so
+  `task.py current --source` answers `none` and a pointer-based UI (the statusline) can only show
+  nothing. Same session, same command: official `pwsh` resolves a source, the custom bash does not.
+- **Regression assertions:** `dsh-plugin-ptc-bash/test/plugins.test.mjs` — the overlay lands in the
+  spawn spec for the foreground **and** background path, `collect` receives the current `exec`
+  (same object reference), and the three degraded paths (service absent / `collect` throws / empty
+  overlay) still spawn with no `env` key.
+
 ## Credential boundary
 
 A plugin never accepts a foreign credential reference from the client:

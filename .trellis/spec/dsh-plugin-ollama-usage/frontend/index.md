@@ -67,6 +67,7 @@ Each row is an observed failure, not a style preference.
 | Every RPC call sends `payload`, `{}` when empty | The host answers `gateway/bad-request: invalid client-request message`; the caller's promise rejects and the surface stays on its loading state forever. |
 | Nothing in `apply` may throw | `dsh: plugin tree failed to load: failed to apply loader entry …` — dsh will not boot. |
 | `ctx.effect` only around registrations that return a disposer | `TypeError: Invalid effect` (`settings.register` returns a scope). |
+| A hand-written shell tool passes no `env` from `ctx.shellEnv.collect(exec)`, or does not declare `shellEnv` in `inject` | `dsh-subprocess` scrubs ambient `DSH_*`, so the child sees none: `DSH_SESSION_ID` never arrives, Trellis' `task.py` runs in *degraded mode* and writes no session pointer, and any pointer-based UI (the statusline) has nothing to show. Silent by construction — no error anywhere. |
 | No dependencies, no build step | The host half must import no `@deepseek-ai/*`; the bundle may require only `react`. Both are asserted by the suite. |
 
 ## Guides
