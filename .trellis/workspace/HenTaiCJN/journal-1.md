@@ -123,3 +123,47 @@ R2/R6 决策落地：statusline 与 ollama-usage 都改为自开 webServer 路�
 ### Status
 
 [OK] **Completed**
+
+
+## Session 6: statusline 会话身份：R1 真机验收 + R2/R3 指针唯一证据（提交并归档）
+<!-- trellis-session: v=2 fp=5256724542ad8e0a -->
+
+**Date**: 2026-09-17
+**Task**: statusline 会话身份：R1 真机验收 + R2/R3 指针唯一证据（提交并归档）
+**Package**: dsh-plugin-ollama-usage
+**Branch**: `master`
+
+### Summary
+
+新会话（session-61758d0f）真机验收通过：自定义 bash 已拿到 DSH_SESSION_ID/DSH_SHELL（与官方 pwsh 逐字一致），resolve_context_key 返回 dsh_session-<id>，一次性仓库里 task.py create 无降级并写指针，真实工作区 task.py start 同样无降级 —— R1 达成（dsh-plugin-ptc-bash 7cce955）。R2/R3 按用户定案 D1=(a) 落地（dsh-plugin-trellis-statusline 27b5b39）：task/read 只认 Trellis 会话指针、删除工作区扫描兜底（净 -51 行），无指针/陈旧/越界/损坏一律 none，pill 不渲染；用户判断是指针为唯一无风险可信来源，活会话事件推断与 zstd 日志解码一并否决。spec 增补 shellEnv 注入契约（57308f3），任务文档 5dfa6b3 与指针 5fec91a 提交后归档（8d693cc），归档已清空运行时会话指针。
+
+### Main Changes
+
+- dsh-bash-win：inject 增 shellEnv + spawn spec 显式 env=ctx.shellEnv.collect(exec)，前台/后台共用；单测补 4 例覆盖 overlay 传递与三种降级
+- statusline host：readTask 只走指针，删 scanTasks/statusRank/RUNNING_STATUSES；client 仅注释；host 组新增 4 条「无指针不误报」断言，README/design-notes 改写
+- spec：halves-contract 增「Shell tools must forward ctx.shellEnv.collect(exec)」小节，index 硬约束表加一行（子进程被 scrub 的静默失败）
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `57308f3` | docs(trellis): 补充自定义 shell 工具的会话身份注入契约（DSH_*） |
+| `5dfa6b3` | docs(trellis): statusline 会话身份任务的规划与产物（R1 真机验收 + R2/R3 落地） |
+| `5fec91a` | chore: 更新 dsh-plugin-ptc-bash 与 dsh-plugin-trellis-statusline 指针 |
+
+### Testing
+
+- [OK] ptc-bash npm test 29/29；node --check 通过；仓库源与 DSH_HOME 生成物 cmp 一致
+- [OK] statusline npm test 195/195（host 58 / client 45 / cell 81 / integration 11）
+- [OK] 伪证检验：host 半边还原 HEAD 后 host 组 54/58，恰好 4 条新断言失败；真机探针本会话出 pill、无指针会话 none
+- [OK] 真机：bash env 含 DSH_SESSION_ID；scratch 仓库 task.py create 写指针；真实工作区 task.py start 无降级
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- 重启 dsh（或重载插件）让新 host 半边生效；归档后本工作区无活动任务，状态栏应显示空白（指针已清空，正是新语义）
+- 两个子模块与 meta 仓库均未 push；npm 已发布版本不含本次修复（本地 profile 走 link:，对外需发版）
+- 第三方 liangshen 预设 custom-bash.mjs 同缺陷待上报上游
