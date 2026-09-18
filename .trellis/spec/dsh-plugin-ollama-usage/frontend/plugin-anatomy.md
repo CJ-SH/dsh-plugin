@@ -86,6 +86,47 @@ when only one entry changes.
 Loading a plugin requires restarting dsh; that restart ends an agent's own process, so hand the
 command to the user.
 
+## Module resolution: why a `link:` plugin cannot import `@deepseek-ai/*`
+
+> Measured against `dsh 0.1.5-rc.2` on 2026-09-17 while building `dsh-plugin-web-search`.
+
+The dependency-free stance above is not only a style choice — for a **`link:`-installed** plugin it
+is a hard constraint, and it is easy to discover too late (the failure is at plugin load, not at
+type-check time).
+
+**The rule.** Node resolves a module's bare imports from that module's **real path**, and it
+realpaths a symlinked (junction) plugin directory before walking up. A plugin linked in from
+`D:\project\...` therefore walks `D:\project\...` → `D:\...` and never reaches
+`$DSH_HOME/profiles/node_modules` — the fallback `healProfilesModuleFallback` maintains to supply
+"the installation dependency closure through Node's ordinary parent-walk". Measured three ways:
+
+| Resolution base | `@deepseek-ai/dsh-web` |
+|---|---|
+| plugin's real path | `ERR_MODULE_NOT_FOUND` |
+| through a real Windows junction in `profiles/web/node_modules` | `ERR_MODULE_NOT_FOUND` (realpathed) |
+| a **copy** physically under `profiles/web/node_modules` | resolves |
+
+So importing the installation's packages requires the plugin to **live** under the profile's
+`node_modules` — i.e. a materialized install (tgz / copy), which is exactly how shipped
+`dsh-llm-ollama` imports `@deepseek-ai/schemastery` and `@deepseek-ai/dsh-web` from a tgz.
+
+**Three ways to satisfy it, in order of preference.**
+
+1. **Stay dependency-free.** Ship the settings schema as a plain callable object carrying
+   `toJSON()` — the shape `dsh-settings` actually consumes — and take errors as plain `Error`.
+   `dsh-plugin-ollama-usage` does exactly this; see its module header.
+2. **Install materialized** (tgz / copy). Bare imports then work with no extra step.
+3. **Keep `link:` and link the peers by hand** (what `dsh-plugin-web-search` ships as
+   `npm run link-imports`): create `<plugin>/node_modules/@deepseek-ai/<pkg>` junctions pointing at
+   `$DSH_HOME/profiles/node_modules/@deepseek-ai/<pkg>`. Those entries are themselves symlinks to
+   the very files the harness loads, so **one module instance** is shared — which is what makes
+   `error instanceof HarnessError` hold.
+
+> **Never `npm install` those packages into the plugin.** A copy resolves but is a *different*
+> module instance, so `dsh-tools`' `error instanceof HarnessError` check
+> (`dsh-tools/lib/index.js:2515-2518`) returns false and the structured `{name, code}` metadata
+> silently disappears — the failure is a missing error code, not an exception.
+
 ## Naming conventions
 
 | Thing | Convention | Example |
