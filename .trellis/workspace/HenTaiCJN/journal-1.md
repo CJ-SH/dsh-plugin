@@ -167,3 +167,47 @@ R2/R6 决策落地：statusline 与 ollama-usage 都改为自开 webServer 路�
 - 重启 dsh（或重载插件）让新 host 半边生效；归档后本工作区无活动任务，状态栏应显示空白（指针已清空，正是新语义）
 - 两个子模块与 meta 仓库均未 push；npm 已发布版本不含本次修复（本地 profile 走 link:，对外需发版）
 - 第三方 liangshen 预设 custom-bash.mjs 同缺陷待上报上游
+
+
+## Session 7: dsh-plugin-web-search：格式兼容的 web provider 插件
+<!-- trellis-session: v=2 fp=fc61a1bf724c9a3c -->
+
+**Date**: 2026-09-18
+**Task**: dsh-plugin-web-search：格式兼容的 web provider 插件
+**Package**: dsh-plugin-ollama-usage
+**Branch**: `master`
+
+### Summary
+
+为 DSH 交付自定义 web provider 插件：以 wire 格式而非厂商为 provider 身份，接管 home patch 层完成选择，并把抓取交给远端格式服务以绕开本机 fake-ip
+
+### Main Changes
+
+- 交付 dsh-plugin-web-search 插件包（Host+Client+清单+patch+link-imports，共 3042 行）
+- provider 身份 = wire 格式：searxng(search) / jina(fetch) / firecrawl(fetch)；卡片显示「兼容 X 格式」，端点由用户填，与 llm-pi-ai 的 api+baseURL 同构
+- 接管机制：幂等哨兵块写入 home patch 层，文本级手术编辑保全用户注释，profile 的 live reload 使其无需重启生效
+- 卡片为可折叠外壳 + 两个 provider 下拉，按格式分组端点/header；选项来自只读枚举 ctx.web 的 provider 注册表
+- 实测发现 link: 安装的插件无法 import @deepseek-ai/*（Node realpath 后父级查找够不到安装闭包），以 tools/link-imports.mjs 链接到同一份物理文件，该事实已回写 spec
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `49c8767` | feat: web-search 格式兼容插件包（Host+Client+清单+patch，三套自检 194 条断言） |
+| `f288341` | docs(trellis): 接入 dsh-plugin-web-search 子模块并回写模块解析契约 |
+
+### Testing
+
+- [OK] 三套无依赖 harness 194 条断言全绿（host 123 / client 32 / card 39）
+- [OK] 真机端到端：web_search 经 SearxNG 取 8 条来源，title/snippet 映射 8/8；web_fetch 经用户自建 Jina 兼容服务成功（example.com 113 字符、searxng.org 20902 字符）
+- [OK] 发现并修复可用性 bug：provider 误读 section 根导致 available() 恒 false（原测试用扁平 reader 掩盖了它，已改为真实 section 形状并补 nil 与缺失切片两条断言）
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- 创建 GitHub 仓库 CJ-SH/dsh-plugin-web-search 后推送插件（本机无 gh，远端尚不存在）
+- 元仓库未配置 remote，推送目标待用户指定
+- 卸载 dsh-llm-ollama 与 dsh-llm-providers-ui 后做一次端到端回归
