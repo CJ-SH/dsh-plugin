@@ -8,8 +8,8 @@
 
 <!-- @@@auto:current-status -->
 - **Active File**: `journal-1.md`
-- **Total Sessions**: 7
-- **Last Active**: 2026-09-18
+- **Total Sessions**: 8
+- **Last Active**: 2026-09-20
 <!-- @@@/auto:current-status -->
 
 ---
@@ -19,7 +19,7 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-1.md` | ~213 | Active |
+| `journal-1.md` | ~252 | Active |
 <!-- @@@/auto:active-documents -->
 
 ---
@@ -29,6 +29,7 @@
 <!-- @@@auto:session-history -->
 | # | Date | Title | Commits | Branch |
 |---|------|-------|---------|--------|
+| 8 | 2026-09-20 | dsh 源会话 500 归因与运行时取证契约 | `915c8be` | `master` |
 | 7 | 2026-09-18 | dsh-plugin-web-search：格式兼容的 web provider 插件 | `49c8767`, `f288341` | `master` |
 | 6 | 2026-09-17 | statusline 会话身份：R1 真机验收 + R2/R3 指针唯一证据（提交并归档） | `57308f3`, `5dfa6b3`, `5fec91a` | `master` |
 | 5 | 2026-09-16 | PTC+Bash agent 预设：官方 PTC 基底 + Windows Git Bash 首选 shell | `9477eab`, `0953def`, `f7ec4b4` | `master` |

@@ -211,3 +211,42 @@ R2/R6 决策落地：statusline 与 ollama-usage 都改为自开 webServer 路�
 - 创建 GitHub 仓库 CJ-SH/dsh-plugin-web-search 后推送插件（本机无 gh，远端尚不存在）
 - 元仓库未配置 remote，推送目标待用户指定
 - 卸载 dsh-llm-ollama 与 dsh-llm-providers-ui 后做一次端到端回归
+
+
+## Session 8: dsh 源会话 500 归因与运行时取证契约
+<!-- trellis-session: v=2 fp=445d5bab416e8218 -->
+
+**Date**: 2026-09-20
+**Task**: dsh 源会话 500 归因与运行时取证契约
+**Package**: dsh-plugin-ollama-usage
+**Branch**: `master`
+
+### Summary
+
+定位 [P2] 新会话不显示工作区活动任务 的源会话并查明其「本轮运行失败 500」：两次判定实验证明该会话 payload 被上游确定性拒绝、会话不可恢复，并把会话取证与错误链路写成 spec
+
+### Main Changes
+
+- 定位源会话 session-4a220f8c…（指针 + 日志内 task.py 痕迹交叉验证），锚定 386be7ca = t21 终局（15:35:35）与首次 500 = t20/s4（15:30:50）
+- 判定实验：B 合成重放 200（380,499 prompt tokens）/ A 真机 resume 后 turn 23 再 500×5（终局 ec506f3c）⇒ 端点健康而真实 payload 被拒，会话不可恢复
+- spec 回写：新增 frontend/runtime-diagnostics.md、guides/turn-failure-triage.md，两个 index 挂链
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `915c8be` | docs(spec): dsh 会话日志取证与 provider 5xx 归因契约（多帧 zstd / 错误链路 / 排查纪律） |
+
+### Testing
+
+- [OK] 全量扫描 41 个会话日志：09-20 仅该会话有错误轮；66d44746 803,810 / cecc8255 801,758 tokens 零错误 ⇒ 推翻尺寸墙与整体故障假设
+- [OK] node --check 全部探针通过；重放只打印 HTTP 状态，实测消耗 380,530 input tokens
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- 父任务 09-20-new-session-workspace-task：重启 dsh + 硬刷新页面做目视 AC3，再提交两个子模块
+- 可选后续任务：不可恢复会话检测 + pruner-only 降级自救（本工作区插件形态）
