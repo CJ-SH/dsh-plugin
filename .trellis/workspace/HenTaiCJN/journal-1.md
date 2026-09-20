@@ -250,3 +250,43 @@ R2/R6 决策落地：statusline 与 ollama-usage 都改为自开 webServer 路�
 
 - 父任务 09-20-new-session-workspace-task：重启 dsh + 硬刷新页面做目视 AC3，再提交两个子模块
 - 可选后续任务：不可恢复会话检测 + pruner-only 降级自救（本工作区插件形态）
+
+
+## Session 9: 无指针会话计数与图标；两插件 hero pill 迁入 input.dock
+<!-- trellis-session: v=2 fp=d48d0d7279234707 -->
+
+**Date**: 2026-09-20
+**Task**: 无指针会话计数与图标；两插件 hero pill 迁入 input.dock
+**Package**: dsh-plugin-ollama-usage
+**Branch**: `master`
+
+### Summary
+
+完成父任务 09-20-new-session-workspace-task：无指针会话显示工作区活动任务计数（带 14x14 清单图标），并把 statusline / ollama-usage 的 hero pill 从 shell.overlay 测量方案迁入 conversation.input.dock 流式行，回写 seats 契约
+
+### Main Changes
+
+- statusline（子模块 fc48c27）：readTask 第三形态 {status:'workspace',activeTasks}；独立 countActiveTasks() 减 00-bootstrap-guidelines；计数 pill 带装饰性内联 svg；hero pill 迁入 input.dock，删除 measureHero/ResizeObserver/视口监听
+- ollama-usage（子模块 161fa8f）：hero 用量 pill 同排迁入 input.dock，与 statusline 注入同一条 [data-slot=conversation.input.dock] row-wrap 规则（幂等）
+- spec 回写：seats.md 改写（input.dock 为 hero 席位、display:contents 锚点与 !important row-wrap 契约及其代价、overlay 退役），self-check/index 同步
+- 元仓库 4c35996：两个子模块指针 + spec + 任务记录一并提交
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `4c35996` | feat(trellis): 计数图标与 hero 席位落地（子模块指针 + seats 契约 + 任务记录） |
+
+### Testing
+
+- [OK] statusline npm test = 61+51+77+20 = 209 断言全绿；四条新断言做了伪证检验（摘掉渲染调用 → integration 18/20、cell 76/77；摘掉 CSS 规则 → client 50/51；恢复后全绿）
+- [OK] ollama-usage npm test = 44+29+10+6 = 89 断言全绿；两半 node --check 通过
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- AC3 的真机目视尚未记录：重启 dsh + 硬刷新后确认新会话显示「工作区 2 个活动任务 + 清单图标」、两颗 pill 同行不重叠、有指针会话形态不变
+- 两个子模块与元仓库均未 push（元仓库未配置 remote）；ollama key 曾在会话中明文出现，建议轮换
