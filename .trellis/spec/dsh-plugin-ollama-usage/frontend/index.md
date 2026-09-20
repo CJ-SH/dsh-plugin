@@ -79,6 +79,7 @@ Each row is an observed failure, not a style preference.
 | [Seats](./seats.md) | How UI is placed: registration rules, `name` vs `id`/`key`, the seats in use, the session-header seats |
 | [Self-Check and Verification](./self-check.md) | Harness style, release gate, code style, errors and secrets, forbidden patterns, git |
 | [Type Safety](./type-safety.md) | No-TypeScript conventions, runtime narrowing, boundary rules, wire discipline |
+| [Runtime Diagnostics](./runtime-diagnostics.md) | Session transcript format (multi-frame zstd), record surface, provider-5xx → retry → `turnError` chain, session pointers, credential store |
 
 ## Key files
 
