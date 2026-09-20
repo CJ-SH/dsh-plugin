@@ -20,7 +20,7 @@ here rather than duplicating a second copy of the same platform facts.
 | package / manifest / patch shape, install and verify commands | component structure and props style |
 | bundle format, host module surface, service declaration | hook patterns, subscription and measurement effects |
 | RPC channel, envelope, endpoint rules, cross-half constants | the shared store, refcounted polling, phase model, card state machine |
-| seat registration rules and the seats in use (dock, overlay, settings, session header) | stylesheet contents, class names, layout measurement |
+| seat registration rules and the seats in use (composer dock, input dock, settings, session header) | stylesheet contents, class names, layout measurement |
 | self-check harness style, code and commit style | credential-mode UX details |
 | host session → workspace resolution (`sessions` / `workspaceRegistry`) | any one plugin's own resolution policy |
 

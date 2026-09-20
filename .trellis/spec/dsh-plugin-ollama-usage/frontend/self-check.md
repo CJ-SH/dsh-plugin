@@ -23,7 +23,7 @@ with `&&`) fails the chain.
 | `test/host.test.mjs` | fake cordis context plus service stubs | settings namespace and schema, RPC channel, reply envelopes, endpoint derivation, credential write boundary, empty states, "host half imports no `@deepseek-ai/*`", manifest and bundle packaging contract |
 | `test/client.test.mjs` | fake `window.__ModuleLoader__`, React stub, fake `document` | bundle id equals the package name, only `react` required, `apply`/`inject` exports, seats (slot name **and** cell id/key) with order, stylesheet lifecycle, cross-half constant agreement |
 | `test/card.test.mjs` | minimal hook runtime | the settings card drives its endpoints and leaves the loading state |
-| `test/hero.test.mjs` | minimal hook runtime per component | the dock/overlay visibility rule |
+| `test/hero.test.mjs` | minimal hook runtime per component | the hero/dock visibility rule (one `conversation.input.dock` entry, both phases) |
 
 Rules:
 

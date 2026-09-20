@@ -1,0 +1,28 @@
+{
+  "id": "new-session-workspace-task",
+  "name": "new-session-workspace-task",
+  "title": "新会话不显示工作区活动任务",
+  "description": "无指针的新会话拿不到工作区活动任务：扫描要求 branch 非空，planning/未 start 的任务被整体排除，pill 空白",
+  "status": "in_progress",
+  "dev_type": null,
+  "scope": null,
+  "package": "dsh-plugin-ollama-usage",
+  "priority": "P2",
+  "creator": "HenTaiCJN",
+  "assignee": "HenTaiCJN",
+  "createdAt": "2026-09-20",
+  "completedAt": null,
+  "branch": "master",
+  "base_branch": "master",
+  "worktree_path": null,
+  "commit": null,
+  "pr_url": null,
+  "subtasks": [],
+  "children": [
+    "09-20-investigate-source-session-500"
+  ],
+  "parent": null,
+  "relatedFiles": [],
+  "notes": "",
+  "meta": {}
+}

@@ -26,11 +26,13 @@ seat that is not rendered yet stays empty.
 
 ## Seats in use
 
-| Seat | Own identity | Kind |
-|---|---|---|
-| `conversation.composer.dock` | `id: 'ollama-usage'`, `order: 1` | list — one row under the composer |
-| `shell.overlay` | `id: 'ollama-usage-hero'`, `order: 1` | frame-wide floating layer |
-| `settings.plugin.item` | `key: 'ollama-usage'` (the settings namespace) | plugin configuration card |
+| Seat | Own identity | Kind | Used since |
+|---|---|---|---|
+| `conversation.composer.dock` | `id: 'ollama-usage'`, `order: 1` | list — one row **below** the composer card (not rendered in the hero phase) | v1 |
+| `conversation.input.dock` | `id: 'ollama-usage-hero'`, `order: 1`; `id: 'trellis-statusline-dock'`, `order: 30` | list — full-width entries **above** the composer card; flow-laid, renders in both phases | 2026-09-20 |
+| `conversation.session.header.actions` | `id: 'trellis-statusline'`, `order: 10` | list — title-adjacent actions | 2026-09-15 |
+| `settings.plugin.item` | `key: 'ollama-usage'` (the settings namespace) | plugin configuration card | v1 |
+| `shell.overlay` | — | frame-wide floating layer; **these plugins no longer use it** | retired 2026-09-20 |
 
 A settings card appears only when **both** halves agree: the host registers the settings namespace
 and the browser registers a cell under the same key.
@@ -62,8 +64,9 @@ The `conversation.session.header.*` seats are declared by one entry in
   not using".
 - **`order` is the only ordering control**, and it is optional (default 0).
 - **The whole header — and therefore every seat inside it — is absent in the hero (new-session)
-  phase.** A surface that must be visible before the first message needs a second seat
-  (`shell.overlay`); do not expect a header seat to cover that phase.
+  phase.** A surface that must be visible before the first message needs a second seat; since
+  2026-09-20 that seat is `conversation.input.dock` (see the next section), not `shell.overlay`.
+  Do not expect a header seat to cover that phase.
 - **Localization**: register dictionaries with `ctx.locale.register(ns, { zh, en })` and pass the
   same `ns` as the registration's `locale` option. The owner then projects a namespace-bound `t`
   into the cell's props, so a locale change follows without re-registering. A cell cannot assume
@@ -110,20 +113,32 @@ Consequences worth remembering:
   and the Hero sets `variant === "hero"`, so it never renders there at all.
   `conversation.input.dock` renders in both (gated only on `input`/`sessionId`). A minute at the
   render site beats a rewrite.
-- **When no seat is where you need it, `shell.overlay` plus measurement is the sanctioned route.**
-  The overlay is root-scoped, `replaceRisk: none`, and click-through. Anchor with the slot protocol's
-  own marker (`document.querySelector('[data-slot="conversation.composer.bar"]')`), never a product
-  CSS class. A **zero-sized rect means a `display:contents` wrapper**, so keep descending a bounded
-  depth instead of concluding "not found". Measure relative to your own box — the overlay layer's
-  origin is not the viewport — and subtract the anchor's computed `padding-bottom` to land under its
-  visible edge. Re-measure with a `ResizeObserver` on your parent and on the anchor, plus a viewport
-  `resize` listener, and release them together. Keep `pointer-events:none` on the zero-size entry and
-  `auto` only on the child that draws, and render **nothing** when measurement fails: a changed
-  layout should cost the surface, not misplace it.
-- **One trap in that pattern**: the wrapper cannot be measured before it exists, and its data often
-  arrives a render later. An effect keyed only on "should this show" measures nothing on the first
-  pass and never tries again — the surface then stays hidden forever. Include "is there anything to
-  draw" in the dependencies.
+- **The hero-phase seat is `conversation.input.dock`, a flow row — measure nothing.** Both plugins
+  moved there on 2026-09-20 and the entire overlay path (`measureHero()`, `ResizeObserver`,
+  viewport listener, computed `padding-bottom` arithmetic, the `shell.overlay` registrations) was
+  deleted. The measured overlay was the *shared* explanation for the collision it produced: two
+  independently positioned pills in unmanaged space overlapped by ~9px, and no plugin can see the
+  other's coordinates. A flow row removes the class of bug rather than tuning it.
+- **The seat's anchor is `display:contents` — inline — so entries stack in the composer's column.**
+  The catalog calls `conversation.input.dock` "full-width entries above the composer card", and the
+  anchor renders as `<div data-slot="conversation.input.dock" style="display:contents">`. Each entry
+  is therefore a direct child of the composer's vertical stack: **one row per entry**. Two compact
+  pills that belong on one line need the anchor re-flowed, and only `!important` beats the inline
+  style:
+  ```css
+  [data-slot="conversation.input.dock"]{display:flex !important;flex-flow:row wrap;justify-content:center;align-items:center;gap:var(--dsh-composer-stack-gap,6px)}
+  ```
+  **Both plugins inject that identical rule** — idempotent, so one installation alone is still
+  correct. Under `row wrap` the official full-width entrants (queue / todo / goal) still take a line
+  of their own, so this override does not reshuffle them.
+- **A pill in that row must be content-sized.** `display:inline-flex` on the entry, **no**
+  `width:100%`, or it claims the whole line and the two-pill row degrades to two rows.
+- **State the residual cost honestly**: this override is the one place these plugins style a
+  shell-owned element. If the shell ever changes that anchor's semantics, the failure mode is "two
+  rows instead of one" (or a spacing change), not a lost surface.
+- **A hero entry is gated on "blank **and** nothing to draw".** The composer row stays mounted across
+  the blank→active transition, so an entry that only checks the phase renders a stale pill next to
+  the header one — the trap the cell harness pins.
 
 ## Popovers inside a list seat
 
@@ -146,11 +161,12 @@ dependency-free bundle — the official cells use `dsh-client-ui-primitives`, wh
   `padding-left` does not. Same reasoning for drawing a chevron with two borders instead of a
   `▾` character: a glyph depends on whichever font the user runs.
 
-## Overlay seats
+## Overlay seats (retired here, still a platform seat)
 
-`shell.overlay` is a click-through layer, but its **direct children get `pointer-events:auto`
-automatically**. Keep the registered root box no larger than its content — a full-frame box swallows
-every click in the application.
+These plugins no longer register anything on `shell.overlay` (2026-09-20), but the seat's own
+contract is worth keeping: it is a click-through layer whose **direct children get
+`pointer-events:auto` automatically**. Keep the registered root box no larger than its content — a
+full-frame box swallows every click in the application.
 
 Positioning and measurement techniques are v1 UI detail and deliberately not specified yet; see
 [index](./index.md) for where that knowledge currently lives.
