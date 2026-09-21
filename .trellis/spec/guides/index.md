@@ -24,6 +24,7 @@ These guides help you **ask the right questions before coding**.
 | [Code Reuse Thinking Guide](./code-reuse-thinking-guide.md) | Identify patterns and reduce duplication | When you notice repeated patterns |
 | [Cross-Layer Thinking Guide](./cross-layer-thinking-guide.md) | Think through data flow across layers | Features spanning multiple layers |
 | [Turn Failure Triage Guide](./turn-failure-triage.md) | Prove provider vs harness before explaining a failed turn | Any `本轮运行失败` / `turn/end kind=error` / provider 5xx |
+| [dsh 升级后：派生件失效排查](./dsh-upgrade-derived-assets.md) | 用 harness 自己的发现 API 判定 preset/组合是否还能挂载 | 升级 dsh 后自建预设失效、报「命名了一个无法解析的插件」 |
 
 ---
 
@@ -59,6 +60,14 @@ These guides help you **ask the right questions before coding**.
 - [ ] A provider error carries a `ref` id you cannot interpret
 
 → Read [Turn Failure Triage Guide](./turn-failure-triage.md)
+
+### When a Preset / Derived Asset Breaks After a dsh Upgrade
+
+- [ ] 「预设 X 挂载失败：行 Y 命名了一个无法解析的插件」
+- [ ] 升级 dsh 后自建 preset 不可用，或预设选择器里少了一项
+- [ ] 你准备手工改一份「派生自上游」的 YAML / 源码
+
+→ Read [dsh 升级后：派生件失效排查](./dsh-upgrade-derived-assets.md)
 
 ### When Verifying AI Cross-Review Results
 
