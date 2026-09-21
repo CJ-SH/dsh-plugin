@@ -18,7 +18,9 @@
   "commit": null,
   "pr_url": null,
   "subtasks": [],
-  "children": [],
+  "children": [
+    "09-21-ptc-bash-016-rename-fix"
+  ],
   "parent": null,
   "relatedFiles": [],
   "notes": "",
