@@ -297,7 +297,7 @@ R2/R6 决策落地：statusline 与 ollama-usage 都改为自开 webServer 路�
 
 **Date**: 2026-09-21
 **Task**: 修复 ptc-bash 0.1.6 预设挂载失败：重派生组合 + harness 健康守卫
-**Package**: dsh-plugin-ollama-usage
+**Package**: dsh-plugin-ptc-bash
 **Branch**: `master`
 
 ### Summary
@@ -320,10 +320,10 @@ dsh 升到 0.1.6-alpha.2 后 ptc-bash 预设挂载失败：引擎包 dsh-workflo
 
 ### Testing
 
-- [OK] [OK] npm test 38/38（0 skip，harness 用例实跑）；lib 与两个预设 .mjs 的 node --check 通过
-- [OK] [OK] 负向验证：引擎行改回旧包名并启用 → 5 项失败（harness 报「names a plugin that cannot be resolved」）；删一处收尾引号 → 6 项失败；还原后全绿
-- [OK] [OK] 新守卫对官方 4 个预设 + liangshen 安装副本全部 PASS（无误报）；derive-preset 重跑哈希不变（幂等）
-- [OK] [OK] syncPresets 只写 agent.cordis.yml（failed/removed 为空），安装副本与仓库字节一致；harness 对安装根判定 ptc-bash healthy（此前为 not valid YAML）；用户确认新会话与历史会话均正常
+- [OK] npm test 38/38（0 skip，harness 用例实跑）；lib 与两个预设 .mjs 的 node --check 通过
+- [OK] 负向验证：引擎行改回旧包名并启用 → 5 项失败（harness 报「names a plugin that cannot be resolved」）；删一处收尾引号 → 6 项失败；还原后全绿
+- [OK] 新守卫对官方 4 个预设 + liangshen 安装副本全部 PASS（无误报）；derive-preset 重跑哈希不变（幂等）
+- [OK] syncPresets 只写 agent.cordis.yml（failed/removed 为空），安装副本与仓库字节一致；harness 对安装根判定 ptc-bash healthy（此前为 not valid YAML）；用户确认新会话与历史会话均正常
 
 ### Status
 
