@@ -290,3 +290,47 @@ R2/R6 决策落地：statusline 与 ollama-usage 都改为自开 webServer 路�
 
 - AC3 的真机目视尚未记录：重启 dsh + 硬刷新后确认新会话显示「工作区 2 个活动任务 + 清单图标」、两颗 pill 同行不重叠、有指针会话形态不变
 - 两个子模块与元仓库均未 push（元仓库未配置 remote）；ollama key 曾在会话中明文出现，建议轮换
+
+
+## Session 10: 修复 ptc-bash 0.1.6 预设挂载失败：重派生组合 + harness 健康守卫
+<!-- trellis-session: v=2 fp=63c8d7c97d3851c8 -->
+
+**Date**: 2026-09-21
+**Task**: 修复 ptc-bash 0.1.6 预设挂载失败：重派生组合 + harness 健康守卫
+**Package**: dsh-plugin-ollama-usage
+**Branch**: `master`
+
+### Summary
+
+dsh 升到 0.1.6-alpha.2 后 ptc-bash 预设挂载失败：引擎包 dsh-workflow-worker-thread 已改名 dsh-workflow-ptc，且手改把组合的 name 标量引号写坏。从装机官方 ptc 重派生组合、跟随上游默认禁用编排三行、补 tool-plugin-manager；测试改为用 harness 自己的发现 API 判定组合健康，并收紧同步守卫。用户已确认会话恢复正常。
+
+### Main Changes
+
+- presets/ptc-bash/agent.cordis.yml：derive-preset 重派生（引擎行 workflow-ptc、tool-workflow 复位、workflow-ptc/tool-ralph 跟随上游 disabled、补 tool-plugin-manager），workspace-instructions.mjs 零变化
+- lib/index.js：validateComposition 增补 name 标量引号闭合检查（覆盖任意缩进），坏组合不再被同步进 $DSH_HOME/.agent-presets
+- test/composition-health.test.mjs（新）：调用装机 harness 的 discoverPresets 读 AgentPreset.broken 判定 + 两个变异负向用例 + 与随包 ptc 的结构 diff；找不到装机时显式 skip
+- preset/sync 测试补行口径与守卫用例；README 补编排行口径与「升级后先重派生」；新增共享 guide .trellis/spec/guides/dsh-upgrade-derived-assets.md 并登记 index
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `c85ae77` | fix(ptc-bash): 子模块指针跟到 0.1.6 修复 + 派生件排查 guide |
+| `5adf927` | fix: follow the 0.1.6 rename and guard the composition the harness mounts |
+
+### Testing
+
+- [OK] [OK] npm test 38/38（0 skip，harness 用例实跑）；lib 与两个预设 .mjs 的 node --check 通过
+- [OK] [OK] 负向验证：引擎行改回旧包名并启用 → 5 项失败（harness 报「names a plugin that cannot be resolved」）；删一处收尾引号 → 6 项失败；还原后全绿
+- [OK] [OK] 新守卫对官方 4 个预设 + liangshen 安装副本全部 PASS（无误报）；derive-preset 重跑哈希不变（幂等）
+- [OK] [OK] syncPresets 只写 agent.cordis.yml（failed/removed 为空），安装副本与仓库字节一致；harness 对安装根判定 ptc-bash healthy（此前为 not valid YAML）；用户确认新会话与历史会话均正常
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- liangshen 的同步覆盖风险未处置（用户决定不在本任务内处理）：重启 dsh web 后 @linxin666/dsh-liangshen 会用包内旧行覆盖安装副本，触发条件与两行恢复步骤见归档任务 prd.md 的 RISK-1
+- PTC 会话内 ralph 已随上游默认禁用；需要时去掉 workflow-ptc 与 tool-ralph 的 disabled，并在 tools/derive-preset.mjs 里加第 4 处锚定改动
+- 未 push：外层仓库无 remote；子模块 main 有 remote 但本次未推送

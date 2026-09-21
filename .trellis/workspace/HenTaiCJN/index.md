@@ -8,8 +8,8 @@
 
 <!-- @@@auto:current-status -->
 - **Active File**: `journal-1.md`
-- **Total Sessions**: 9
-- **Last Active**: 2026-09-20
+- **Total Sessions**: 10
+- **Last Active**: 2026-09-21
 <!-- @@@/auto:current-status -->
 
 ---
@@ -19,7 +19,7 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-1.md` | ~292 | Active |
+| `journal-1.md` | ~336 | Active |
 <!-- @@@/auto:active-documents -->
 
 ---
@@ -29,6 +29,7 @@
 <!-- @@@auto:session-history -->
 | # | Date | Title | Commits | Branch |
 |---|------|-------|---------|--------|
+| 10 | 2026-09-21 | 修复 ptc-bash 0.1.6 预设挂载失败：重派生组合 + harness 健康守卫 | `c85ae77`, `5adf927` | `master` |
 | 9 | 2026-09-20 | 无指针会话计数与图标；两插件 hero pill 迁入 input.dock | `4c35996` | `master` |
 | 8 | 2026-09-20 | dsh 源会话 500 归因与运行时取证契约 | `915c8be` | `master` |
 | 7 | 2026-09-18 | dsh-plugin-web-search：格式兼容的 web provider 插件 | `49c8767`, `f288341` | `master` |
