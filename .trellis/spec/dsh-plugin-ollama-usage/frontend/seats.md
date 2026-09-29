@@ -37,6 +37,46 @@ seat that is not rendered yet stays empty.
 A settings card appears only when **both** halves agree: the host registers the settings namespace
 and the browser registers a cell under the same key.
 
+## Anchor containers and geometry
+
+> Measured 2026-09-20 against `0.1.5-rc.2` and re-measured 2026-09-21 against `0.1.6-alpha.2`.
+> Re-measure on every upgrade: the **container** is the thing that moves, and it is not covered by
+> the seat catalog (which keeps reporting the same `kind`/`scope`/"Ambient entries…" text).
+
+**Every slot anchor is `display:contents`** (`dsh-client-ui-renderer/lib/client.js:1094`; `:767` before
+0.1.6). An entry is therefore a **direct flex child of the seat's own container** — the seat gives you a
+box, the container gives you layout. Two consequences:
+
+- **Never measure your way into a sibling's row.** Entries cannot join another cell, and an
+  absolutely positioned pill is exactly what breaks when the shell re-arranges the container. The
+  worked example is `dsh-plugin-ollama-usage`, whose 2026-09-15 measurement path
+  (`findPillRow` + `rowMetrics` + `ResizeObserver` + viewport listener + `height:0`) was deleted on
+  2026-09-21 once the shell grew the row it was imitating.
+- **Width is a variable, not a layout.** Panels that must line up with the composer card compute their
+  own width from the platform's variables — `.lXshSW_root` (TodoPanel) is the shipped example:
+  `width:calc(100% - 2*var(--dsh-composer-side-clearance) - 4*var(--dsh-composer-dock-inset))`,
+  `max-width:calc(var(--dsh-composer-card-max-width) - 4*var(--dsh-composer-dock-inset))`, `margin:0 auto`.
+
+### The two composer containers
+
+| | `conversation.composer.dock` | `conversation.input.dock` |
+|---|---|---|
+| rendered in | `variant === "composer"` only (**never the hero**) | hero **and** conversation |
+| 0.1.5-rc.2 container | InputBar root: `flex-direction:column; align-items:center`, **no gap**, `:has([data-composer-stats]){padding-bottom:4px}` | `.composerStack`: `column`, `gap:var(--dsh-composer-stack-gap,6px)`; hero adds `align-self:center` + max width |
+| 0.1.6-alpha.2 container | **`.uV2eYG_dock`: `display:flex; justify-content:center; align-items:center; gap:12px; max-width:100%`** — a centred row shared with the shell's new `ContextMeter`; the root's padding is now a uniform `0 side-clearance 4px` | unchanged (still a column) |
+
+**The rule that follows:** on `composer.dock`, entries share one row automatically from
+`0.1.6-alpha.2` on, and the *same markup* degrades to a centred row of its own on `0.1.5-rc.2` — so a
+plugin needs neither a version probe nor a measurement. On `input.dock`, the container is still a
+column on both versions, so two compact pills that belong on one line still need the anchor override
+(`!important` is required because the shell writes `display:contents` inline):
+
+```css
+[data-slot="conversation.input.dock"]{display:flex !important;flex-flow:row wrap;justify-content:center;align-items:center;gap:var(--dsh-composer-stack-gap,6px)}
+```
+
+Full-width official entrants (queue / todo / goal) still take a line of their own under `row wrap`.
+
 ## Session-header seats
 
 > Measured against `dsh 0.1.5-rc.2` on 2026-09-15 while building `dsh-plugin-trellis-statusline`.
@@ -149,6 +189,11 @@ dependency-free bundle — the official cells use `dsh-client-ui-primitives`, wh
 - **Root is `position:relative`, the popover is `position:absolute`.** The official jobs cell
   does exactly this inside `.actions` (`top:calc(100% + 5px); left:0`), which is the proof that
   the header does not clip its children. Give the popover a `z-index`.
+- **Removing a positioning you inherit is a silent move.** When a measured overlay is deleted, the
+  wrapper that was `position:absolute` (and therefore doubled as the popover's containing block)
+  becomes static, and the popover silently climbs to the next positioned ancestor — the composer card
+  or the conversation root — so it pops somewhere else *with no code error*. `dsh-plugin-ollama-usage`
+  hit exactly this on 2026-09-21; the fix is one `position:relative` on the element that holds the pill.
 - **Register dismissal listeners on `document` while open, and remove them together.** One
   `pointerdown` (close when the event target is outside the root) and one `keydown` (Escape).
   Owning both in a single effect means they cannot leak one without the other, and unmounting

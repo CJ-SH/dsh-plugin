@@ -1,5 +1,12 @@
 # dsh 升级后：派生件失效排查指南
 
+> **SUPERSEDED for dsh 0.2+**: the whole disk-discovery mechanism this guide describes was REMOVED in
+> 0.2.0-rc.1 — there is no `@deepseek-ai/dsh-agent-presets`, no `discoverPresets`, no
+> `SHIPPED_PRESET_ROOT`, and nothing scans `$DSH_HOME/.agent-presets`. Presets are now **declared**
+> through `ctx.agentPresets.register(...)`. Read
+> [dsh 0.2 插件契约](./dsh-0.2-plugin-contract.md) §3 instead; this file is kept only for the
+> discipline it states about fake-green guards, which still applies.
+
 > **Purpose**: 升级 dsh 后，凡是「从装机产物派生」的东西——agent preset 的组合行、派生脚本的锚点、
 > 从上游拷来的常量——都可能指向已被改名或删除的包。本文件只给排查清单；具体契约与命令见
 > `dsh-plugin-ptc-bash/README.md`（「验证」「迭代注意」两节）与 harness 的

@@ -24,6 +24,7 @@ These guides help you **ask the right questions before coding**.
 | [Code Reuse Thinking Guide](./code-reuse-thinking-guide.md) | Identify patterns and reduce duplication | When you notice repeated patterns |
 | [Cross-Layer Thinking Guide](./cross-layer-thinking-guide.md) | Think through data flow across layers | Features spanning multiple layers |
 | [Turn Failure Triage Guide](./turn-failure-triage.md) | Prove provider vs harness before explaining a failed turn | Any `本轮运行失败` / `turn/end kind=error` / provider 5xx |
+| [dsh 0.2 插件契约](./dsh-0.2-plugin-contract.md) | What 0.2.0-rc.1 broke: settings service, seats, presets, peer gating | **Any** plugin work, and every dsh upgrade |
 | [dsh 升级后：派生件失效排查](./dsh-upgrade-derived-assets.md) | 用 harness 自己的发现 API 判定 preset/组合是否还能挂载 | 升级 dsh 后自建预设失效、报「命名了一个无法解析的插件」 |
 
 ---

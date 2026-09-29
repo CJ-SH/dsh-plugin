@@ -10,3 +10,6 @@
 [submodule "dsh-plugin-web-search"]
 	path = dsh-plugin-web-search
 	url = https://github.com/CJ-SH/dsh-plugin-web-search.git
+[submodule "dsh-plugin-suite"]
+	path = dsh-plugin-suite
+	url = https://github.com/CJ-SH/dsh-plugin-suite.git
