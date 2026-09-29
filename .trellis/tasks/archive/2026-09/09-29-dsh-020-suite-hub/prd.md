@@ -1,8 +1,8 @@
-# ptc-bash 预设交付机制重做
+# 新增 dsh-plugin-suite 统一管理 hub
 
 ## Goal
 
-改为 ctx.agentPresets.register 声明式注册，恢复 4 条权威守卫，修 derive-preset 锚点
+一条 navList + 聚合子座位 + 四插件状态区；插件检测到 hub 时让位
 
 ## Requirements
 

@@ -1,0 +1,33 @@
+{
+  "id": "dsh-020-plugin-adaptation",
+  "name": "dsh-020-plugin-adaptation",
+  "title": "自建插件适配 dsh 0.2.0-rc.1",
+  "description": "审计并升级全部四个自制插件（ollama-usage / ptc-bash / trellis-statusline / web-search）以适配 dsh 0.2.0-rc.1",
+  "status": "completed",
+  "dev_type": null,
+  "scope": null,
+  "package": "dsh-plugin-ollama-usage",
+  "priority": "P2",
+  "creator": "HenTaiCJN",
+  "assignee": "HenTaiCJN",
+  "createdAt": "2026-09-29",
+  "completedAt": "2026-09-29",
+  "branch": "master",
+  "base_branch": "master",
+  "worktree_path": null,
+  "commit": null,
+  "pr_url": null,
+  "subtasks": [],
+  "children": [
+    "09-29-dsh-020-config-migration",
+    "09-29-dsh-020-web-search",
+    "09-29-dsh-020-ollama-usage",
+    "09-29-dsh-020-ptc-bash",
+    "09-29-dsh-020-trellis-statusline",
+    "09-29-dsh-020-suite-hub"
+  ],
+  "parent": null,
+  "relatedFiles": [],
+  "notes": "",
+  "meta": {}
+}
