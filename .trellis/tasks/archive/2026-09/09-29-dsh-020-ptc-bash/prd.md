@@ -1,8 +1,8 @@
-# web-search 适配 dsh 0.2.0-rc.1
+# ptc-bash 预设交付机制重做
 
 ## Goal
 
-声明 Config(volatile)、删除 installSection、座位迁到 settings.section、恢复 web_search/web_fetch
+改为 ctx.agentPresets.register 声明式注册，恢复 4 条权威守卫，修 derive-preset 锚点
 
 ## Requirements
 
