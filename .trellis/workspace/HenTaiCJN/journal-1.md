@@ -334,3 +334,52 @@ dsh 升到 0.1.6-alpha.2 后 ptc-bash 预设挂载失败：引擎包 dsh-workflo
 - liangshen 的同步覆盖风险未处置（用户决定不在本任务内处理）：重启 dsh web 后 @linxin666/dsh-liangshen 会用包内旧行覆盖安装副本，触发条件与两行恢复步骤见归档任务 prd.md 的 RISK-1
 - PTC 会话内 ralph 已随上游默认禁用；需要时去掉 workflow-ptc 与 tool-ralph 的 disabled，并在 tools/derive-preset.mjs 里加第 4 处锚定改动
 - 未 push：外层仓库无 remote；子模块 main 有 remote 但本次未推送
+
+
+## Session 11: 5 个插件中英双语 README + docs/ 技术笔记；统一发版 v0.2.0
+<!-- trellis-session: v=2 fp=8b2600fb4ebe60ca -->
+
+**Date**: 2026-09-30
+**Task**: 5 个插件中英双语 README + docs/ 技术笔记；统一发版 v0.2.0
+**Package**: dsh-plugin-ollama-usage
+**Branch**: `master`
+
+### Summary
+
+把 5 个插件仓库的 README 重写成「简洁 + 功能/安装/使用靠前」的中英双语对（标题层级逐位一致），把契约/排障/内部结构搬进各仓库 docs/design-notes.md；据此统一发版 v0.2.0（注释 tag + 双语 GitHub Release），并沉淀发版指南
+
+### Main Changes
+
+- 5 仓库双语文档对：README.md（英）/ README.zh.md（中，先交 review）；体量 205/172/87/250/187 → 82/55/55/74/64 行
+- 5 仓库新增/增补 docs/design-notes.md（196/182/179/548/219 行）承接契约与排障；package.json.files 同步加 README.zh.md 与 docs
+- dsh-plugin-suite 补上缺失的 LICENSE（与其余 4 仓逐字同文）；ptc-bash 的 manifest 目录白名单加 docs（包布局声明同步，断言语义未放松）
+- 事实纠正：ollama-usage 配置入口改为设置页（lib/client.js:975 实注册 settings.section）；两仓断言数按实测（128/41、212/131/42/39）；ptc-bash/web-search 安装命令由占位符展开为真实命令
+- ptc-bash 全面去除「梁神模式」表述（用户裁决：预设已与它无关），仅保留 Apache-2.0 出处与工具链引用
+- 版本 0.1.0 → 0.2.0 + 注释 tag v0.2.0 + 5 条双语（英在前→中）GitHub Release，正文可溯源 commit；父仓库两笔：子模块指针与任务记录、发版指南
+- 新增 .trellis/spec/guides/dsh-plugin-release.md 并挂 index（版本口径 / 凭据 403 套路 / 双语正文格式 / 三向核对）
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `c437da4` | feat(readme): 5 个插件中英双语 README + docs/ 技术笔记；统一发版 v0.2.0（子模块指针 + 任务记录） |
+| `76a595d` | docs(spec): 新增 dsh 插件发版流程指南（版本口径 / 双语 Release / 凭据套路 / 三向核对） |
+
+### Testing
+
+- [OK] 5 仓库 npm test 全绿：128 / 60 / 59 / 254 / 212 断言
+- [OK] 双语对校验：5 仓库标题层级序列 diff 为空
+- [OK] 发版三向核对：ls-remote refs/tags/v0.2.0^{} == 本地 HEAD == 远端分支头；/releases 每仓 1 条且 tag 与 package.json.version 一致；父仓库 gitlink 等于各仓 tag 提交
+- [OK] 全仓 grep liangshen|梁神|special first round → 0 命中；5 仓库 git status 干净
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- trellis-statusline/lib/client.js:99 把状态文案硬编码为中文（locale 仅有 meta），英文 README 示意因此仍是中文 UI —— i18n 缺口，建议另开任务
+- ptc-bash 的 tools/derive-preset.mjs 仍以 LIANGSHEN_PRESET_DIR 作为 workspace-instructions.mjs 的派生源，与「预设与梁神模式无关」的口径有张力，待裁决
+- suite 只降 37%（低于 AC1 的 40%），已记为已知偏差
+- npm 未发布：对外分发走 GitHub（dsh plugin --profile web add github:CJ-SH/<repo>）
+- 工作树仍有 M AGENTS.md（用户侧改动）与 ?? .idea/，均未提交也未 ignore
