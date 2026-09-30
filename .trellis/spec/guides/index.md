@@ -26,6 +26,7 @@ These guides help you **ask the right questions before coding**.
 | [Turn Failure Triage Guide](./turn-failure-triage.md) | Prove provider vs harness before explaining a failed turn | Any `本轮运行失败` / `turn/end kind=error` / provider 5xx |
 | [dsh 0.2 插件契约](./dsh-0.2-plugin-contract.md) | What 0.2.0-rc.1 broke: settings service, seats, presets, peer gating | **Any** plugin work, and every dsh upgrade |
 | [dsh 升级后：派生件失效排查](./dsh-upgrade-derived-assets.md) | 用 harness 自己的发现 API 判定 preset/组合是否还能挂载 | 升级 dsh 后自建预设失效、报「命名了一个无法解析的插件」 |
+| [dsh 插件发版流程](./dsh-plugin-release.md) | 给本仓任一插件切版本：版本号口径、双语 Release 正文、tag 与推送的凭据套路、三向核对 | 要发版（tag + GitHub Release）时 |
 
 ---
 
