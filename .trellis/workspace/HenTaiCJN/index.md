@@ -8,8 +8,8 @@
 
 <!-- @@@auto:current-status -->
 - **Active File**: `journal-1.md`
-- **Total Sessions**: 11
-- **Last Active**: 2026-09-30
+- **Total Sessions**: 13
+- **Last Active**: 2026-10-19
 <!-- @@@/auto:current-status -->
 
 ---
@@ -19,7 +19,7 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-1.md` | ~385 | Active |
+| `journal-1.md` | ~449 | Active |
 <!-- @@@/auto:active-documents -->
 
 ---
@@ -29,6 +29,8 @@
 <!-- @@@auto:session-history -->
 | # | Date | Title | Commits | Branch |
 |---|------|-------|---------|--------|
+| 13 | 2026-10-19 | ptc-bash 0.2.1 适配与持久 bash 执行器 | `7ec68b5` | `master` |
+| 12 | 2026-10-19 | DSH web provider 残留配置诊断与修复 | - | `master` |
 | 11 | 2026-09-30 | 5 个插件中英双语 README + docs/ 技术笔记；统一发版 v0.2.0 | `c437da4`, `76a595d` | `master` |
 | 10 | 2026-09-21 | 修复 ptc-bash 0.1.6 预设挂载失败：重派生组合 + harness 健康守卫 | `c85ae77`, `5adf927` | `master` |
 | 9 | 2026-09-20 | 无指针会话计数与图标；两插件 hero pill 迁入 input.dock | `4c35996` | `master` |

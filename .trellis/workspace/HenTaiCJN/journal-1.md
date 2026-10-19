@@ -383,3 +383,67 @@ dsh 升到 0.1.6-alpha.2 后 ptc-bash 预设挂载失败：引擎包 dsh-workflo
 - suite 只降 37%（低于 AC1 的 40%），已记为已知偏差
 - npm 未发布：对外分发走 GitHub（dsh plugin --profile web add github:CJ-SH/<repo>）
 - 工作树仍有 M AGENTS.md（用户侧改动）与 ?? .idea/，均未提交也未 ignore
+
+
+## Session 12: DSH web provider 残留配置诊断与修复
+<!-- trellis-session: v=2 fp=652b0efefaf340e7 -->
+
+**Date**: 2026-10-19
+**Task**: DSH web provider 残留配置诊断与修复
+**Package**: dsh-plugin-ollama-usage
+**Branch**: `master`
+
+### Summary
+
+定位 dsh-plugin-web-search 卸载后 HOME patch 残留的 searxng/jina provider 选择，恢复默认并按 fake-ip 环境切换到 DeepSeek Fetch API
+
+### Main Changes
+
+- 根因：$DSH_HOME/cordis.patch.yml 的 managed block 仍选 searxng/jina，而注册这两个 id 的插件已卸载 → WEB_PROVIDER_CONFIGURED_MISSING（dsh-web/lib/index.js:123-136）；卸载不会回滚插件写进 HOME patch 的选择
+- HOME patch 先清空为 []，再写入 web 行：searchProvider=deepseek-official、fetchProvider=deepseek-fetch-api
+- profile patch 删除孤立的 - id: web-search（启动时 patch: entry not found 警告消失），migration block 其余条目未动
+- 关键约束：本机 fake-ip DNS（198.18.0.0/15）使内置 http fetch 永远报 non-public IP（fetch-http requestOnce 先走 proxyRouteFor，无代理则本地解析并校验公网 IP）；常用代理端口无监听，故改走服务端 Fetch API
+- 结论：ptc-bash 预设（mode: ptc）下写 TS 经 tools.web_fetch 调用是正规且唯一路径，与本次故障无关
+
+### Git Commits
+
+(No commits - planning session)
+
+### Testing
+
+- [OK] dsh --profile web --dump-config：web 行 = deepseek-official + deepseek-fetch-api，searxng/jina 归零
+- [OK] web_search 返回结果；web_fetch https://example.com 与 https://github.com/Ero-Cat/hr_push 均 HTTP 200
+- [OK] 配置热生效：改 patch 后下一次调用即生效，无需重启 dsh web
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- backups/ 下 3 份 patch 备份待用户确认后可删（原始 jina 版本 / 清空后 / 改 fetch 前）
+- node_modules/dsh-plugin-web-search 软链残留（bundle 已无它，不影响加载），下次 dsh plugin --profile web install 清理
+- 无关残留：web-ui-describe-image / web-ui-doctor 两条 patch not found 警告（@linxin666/dsh-web-all 旧子插件）
+
+
+## Session 13: ptc-bash 0.2.1 适配与持久 bash 执行器
+<!-- trellis-session: v=2 fp=5df7101c2996aafd -->
+
+**Date**: 2026-10-19
+**Task**: ptc-bash 0.2.1 适配与持久 bash 执行器
+**Package**: dsh-plugin-ptc-bash
+**Branch**: `master`
+
+### Summary
+
+0.2.1-rc.2 移除了内置的 `{{cwd}}` 变量，预设 persona suffix 触发严格插值导致每个请求装配失败；删除该子句（cwd 由 working-directory 服务提供）。同轮把 dsh-bash-win 从每次 bash -c 重写为每会话持久 bash -s（heredoc 帧协议、串行队列、超时/中断重建、沙箱门禁、结构化结果、后台独立进程）。子模块提交 238f222；测试 plugins 25/25、全量 70/68（2 项为已知行表漂移，另行处理）；用户手动验证通过。
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `7ec68b5` | chore(ptc-bash): 子模块指针指向 0.2.1 适配提交 |
+
+### Status
+
+[OK] **Completed**
